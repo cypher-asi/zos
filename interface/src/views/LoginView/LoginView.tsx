@@ -1,4 +1,5 @@
 import { Panel, Heading, Text, Button } from "@cypher-asi/zui";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useLoginForm } from "./use-login-form";
 import { LoginForm } from "./LoginForm";
 import { ResetPasswordForm } from "./ResetPasswordForm";
@@ -8,6 +9,13 @@ import styles from "./LoginView.module.css";
 export function LoginView() {
   const f = useLoginForm();
   const bypassLogin = useAuthStore((s) => s.bypassLogin);
+  const navigate = useNavigate();
+  const { redirect: redirectTo } = useSearch({ from: "/login" });
+
+  function handleBypass() {
+    bypassLogin();
+    navigate({ to: redirectTo ?? "/", replace: true });
+  }
 
   return (
     <div className={styles.page}>
@@ -65,7 +73,7 @@ export function LoginView() {
               <Button
                 type="button"
                 variant="ghost"
-                onClick={bypassLogin}
+                onClick={handleBypass}
                 className={styles.bypassButton}
               >
                 Skip login (dev bypass)
