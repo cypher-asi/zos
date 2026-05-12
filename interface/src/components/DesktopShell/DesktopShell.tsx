@@ -14,6 +14,7 @@ import { useAppUIStore } from "../../stores/app-ui-store";
 import { useDesktopBackgroundStore } from "../../stores/desktop-background-store";
 import { AppsModal } from "../AppsModal";
 import { BackgroundModal } from "../../apps/desktop/BackgroundModal";
+import { SettingsModal } from "../SettingsModal";
 import {
   persistSidekickWidth,
   readStoredSidekickWidth,
@@ -46,6 +47,8 @@ export function DesktopShell({ children }: DesktopShellProps) {
   const closeAppsModal = useAppUIStore((s) => s.closeAppsModal);
   const backgroundModalOpen = useAppUIStore((s) => s.backgroundModalOpen);
   const closeBackgroundModal = useAppUIStore((s) => s.closeBackgroundModal);
+  const settingsModalOpen = useAppUIStore((s) => s.settingsModalOpen);
+  const closeSettingsModal = useAppUIStore((s) => s.closeSettingsModal);
 
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const [mainPanelEl, setMainPanelEl] = useState<HTMLDivElement | null>(null);
@@ -154,7 +157,11 @@ export function DesktopShell({ children }: DesktopShellProps) {
 
           <div
             ref={handleMainPanelRef}
-            className={styles.mainPanelHost}
+            className={
+              sidekickHostCollapsed
+                ? `${styles.mainPanelHost} ${styles.mainPanelHostNoSidekick}`
+                : styles.mainPanelHost
+            }
             data-agent-surface="main-panel"
             data-agent-active-app-id={activeApp.id}
             data-agent-active-app-label={activeApp.label}
@@ -199,6 +206,12 @@ export function DesktopShell({ children }: DesktopShellProps) {
             onClose={closeBackgroundModal}
           />
         </Suspense>
+      ) : null}
+      {settingsModalOpen ? (
+        <SettingsModal
+          isOpen={settingsModalOpen}
+          onClose={closeSettingsModal}
+        />
       ) : null}
     </>
   );

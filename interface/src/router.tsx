@@ -135,12 +135,6 @@ const desktopRoute = createRoute({
   component: () => null,
 });
 
-const settingsRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: "settings",
-  component: () => null,
-});
-
 const routeTree = rootRoute.addChildren([
   loginRoute,
   authRoute.addChildren([
@@ -150,7 +144,6 @@ const routeTree = rootRoute.addChildren([
       zeroRoute,
       projectsRoute.addChildren([projectDetailRoute]),
       exploreRoute,
-      settingsRoute,
       desktopRoute,
     ]),
   ]),

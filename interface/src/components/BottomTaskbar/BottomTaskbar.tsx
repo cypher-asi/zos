@@ -4,6 +4,7 @@ import {
   ChevronRight,
   ChevronLeft,
   LayoutGrid,
+  Settings,
 } from "lucide-react";
 import { useActiveApp } from "../../hooks/use-active-app";
 import { useAppUIStore } from "../../stores/app-ui-store";
@@ -25,6 +26,7 @@ function useClock() {
 
 export function BottomTaskbar() {
   const openAppsModal = useAppUIStore((s) => s.openAppsModal);
+  const openSettingsModal = useAppUIStore((s) => s.openSettingsModal);
   const activeApp = useActiveApp();
   const time = useClock();
   const navigate = useNavigate();
@@ -86,6 +88,12 @@ export function BottomTaskbar() {
       </div>
 
       <div className={styles.right}>
+        <TaskbarIconButton
+          icon={<Settings size={TASKBAR_ICON_SIZE} />}
+          title="Settings"
+          aria-label="Settings"
+          onClick={openSettingsModal}
+        />
         <span className={styles.clock}>{time}</span>
       </div>
     </div>

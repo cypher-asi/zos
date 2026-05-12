@@ -9,6 +9,7 @@ type AppUIState = {
   sidekickCollapsed: boolean;
   appsModalOpen: boolean;
   backgroundModalOpen: boolean;
+  settingsModalOpen: boolean;
   previousPath: string | null;
 
   markAppVisited: (appId: string) => void;
@@ -19,6 +20,8 @@ type AppUIState = {
   closeAppsModal: () => void;
   openBackgroundModal: () => void;
   closeBackgroundModal: () => void;
+  openSettingsModal: () => void;
+  closeSettingsModal: () => void;
   setPreviousPath: (path: string) => void;
 };
 
@@ -29,6 +32,7 @@ export const useAppUIStore = create<AppUIState>()((set) => ({
   sidekickCollapsed: false,
   appsModalOpen: false,
   backgroundModalOpen: false,
+  settingsModalOpen: false,
   previousPath: typeof window === "undefined" ? null : getPreviousPath(),
 
   markAppVisited: (appId): void => {
@@ -57,6 +61,8 @@ export const useAppUIStore = create<AppUIState>()((set) => ({
   closeAppsModal: (): void => set({ appsModalOpen: false }),
   openBackgroundModal: (): void => set({ backgroundModalOpen: true }),
   closeBackgroundModal: (): void => set({ backgroundModalOpen: false }),
+  openSettingsModal: (): void => set({ settingsModalOpen: true }),
+  closeSettingsModal: (): void => set({ settingsModalOpen: false }),
 
   setPreviousPath: (path): void => {
     if (!path) return;

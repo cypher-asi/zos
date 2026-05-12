@@ -1,0 +1,69 @@
+/* App-specific design tokens, layered on top of @cypher-asi/zui's themes.
+   ZUI provides the base palette (--color-bg, --color-surface, --color-text-*,
+   --color-success, etc.) keyed off [data-theme='dark'|'light']. The tokens
+   below are zos-specific extensions and per-mode overrides; they live here
+   (not in vendor/zui) so app product tokens stay decoupled from the ZUI
+   package surface. */
+
+:root,
+[data-theme='dark'] {
+  /* Status colors (badges, pills). */
+  --status-pending: #5c6078;
+  --status-ready: #45aaf2;
+  --status-in-progress: #9CDCFE;
+  --status-done: #6b7280;
+  --status-failed: #ff6b6b;
+  --status-blocked: #ff8a50;
+
+  /* Theme-aware aliases for legacy token names that ZUI never defined.
+     Many CSS modules write `var(--color-bg-secondary, #1e1e1e)` /
+     `var(--color-text)` / `var(--color-bg-hover)`; without these aliases
+     the dark-hex fallback fires in BOTH themes, leaving black slabs and
+     missing colors in light mode. */
+  --color-bg-secondary: var(--color-elevated);
+  --color-text: var(--color-text-primary);
+  --color-bg-hover: var(--color-overlay-light);
+  --color-bg-subtle: var(--color-surface);
+  --color-bg-elevated: var(--color-elevated);
+  --color-border-strong: var(--color-border);
+
+  /* ----------------------------------------------------------------------
+     Editable chrome tokens. Defaults live here; the theme-overrides layer
+     (`interface/src/lib/theme-overrides.ts`) can rewrite them via
+     `document.documentElement.style.setProperty(...)` for per-resolved-
+     theme user customisation from Settings > Appearance > Custom colors.
+     ---------------------------------------------------------------------- */
+  --color-surface-tint: rgba(255, 255, 255, 0.04);
+  --color-elevated-tint: rgba(255, 255, 255, 0.06);
+  /* Default the side panels to the same shade as the titlebar / taskbar
+     in dark mode so all desktop chrome reads as one unified surface; the
+     taskbar pill paints color-mix(--color-titlebar-bg, 90%, transparent)
+     over the same backdrop, so matching --color-bg here flattens the
+     subtle stripe difference between chrome and panes. Custom-token
+     overrides via CustomTokensPanel still win — see theme-overrides.ts. */
+  --color-sidebar-bg: var(--color-bg);
+  --color-sidekick-bg: var(--color-bg);
+  --color-titlebar-bg: var(--color-bg);
+}
+
+[data-theme='light'] {
+  --status-pending: #6b7280;
+  --status-ready: #2563eb;
+  --status-in-progress: #1d4ed8;
+  --status-done: #9ca3af;
+  --status-failed: #dc2626;
+  --status-blocked: #ea580c;
+
+  /* Bump light-mode grays for WCAG AA on white. */
+  --color-text-secondary: #374151;
+  --color-text-muted: #4b5563;
+
+  /* Editable chrome tokens — light overrides. Light mode keeps the
+     surface/elevated split so the three lanes are clearly distinguishable
+     against the white background. */
+  --color-surface-tint: rgba(0, 0, 0, 0.04);
+  --color-elevated-tint: rgba(0, 0, 0, 0.06);
+  --color-sidebar-bg: var(--color-surface);
+  --color-sidekick-bg: var(--color-elevated);
+  --color-titlebar-bg: var(--color-bg);
+}

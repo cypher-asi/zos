@@ -6,8 +6,10 @@ import { ThemeProvider } from "@cypher-asi/zui";
 import { queryClient } from "./lib/query-client";
 import { router } from "./router";
 import { useAuthStore } from "./stores/auth-store";
+import { ThemeOverridesBridge } from "./components/ThemeOverridesBridge";
 import "@fontsource-variable/inter";
 import "@cypher-asi/zui/styles";
+import "./styles/tokens.css";
 import "./index.css";
 
 useAuthStore.getState().restoreSession();
@@ -19,6 +21,7 @@ createRoot(rootEl).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="dark" defaultAccent="purple">
+        <ThemeOverridesBridge />
         <RouterProvider router={router} />
       </ThemeProvider>
     </QueryClientProvider>
