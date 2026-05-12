@@ -8,6 +8,29 @@ import {
 } from "../lib/auth-token";
 import { authApi, ApiClientError } from "../api/auth";
 
+const BYPASS_STORAGE_KEY = "zero-dev-bypass";
+
+const BYPASS_USER: ZeroUser = {
+  user_id: "dev-bypass",
+  display_name: "Dev User",
+  profile_image: "",
+  primary_zid: "0://dev",
+  zero_wallet: "",
+  wallets: [],
+  is_zero_pro: false,
+};
+
+function isBypassActive(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(BYPASS_STORAGE_KEY) === "1";
+}
+
+function setBypassActive(active: boolean): void {
+  if (typeof window === "undefined") return;
+  if (active) window.localStorage.setItem(BYPASS_STORAGE_KEY, "1");
+  else window.localStorage.removeItem(BYPASS_STORAGE_KEY);
+}
+
 function sessionToUser(session: AuthSession): ZeroUser {
   return {
     user_id: session.user_id,
@@ -23,6 +46,7 @@ function sessionToUser(session: AuthSession): ZeroUser {
 interface AuthState {
   user: ZeroUser | null;
   isLoading: boolean;
+  isBypass: boolean;
   restoreSession: () => Promise<void>;
   refreshSession: () => Promise<AuthSession>;
   login: (email: string, password: string) => Promise<void>;
@@ -32,14 +56,21 @@ interface AuthState {
     name: string,
     inviteCode: string
   ) => Promise<void>;
+  bypassLogin: () => void;
   logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()((set) => ({
   user: null,
   isLoading: true,
+  isBypass: false,
 
   restoreSession: async () => {
+    if (isBypassActive()) {
+      set({ user: BYPASS_USER, isBypass: true, isLoading: false });
+      return;
+    }
+
     const cached = getStoredSession();
     if (cached) {
       set({ user: sessionToUser(cached) });
@@ -95,12 +126,20 @@ export const useAuthStore = create<AuthState>()((set) => ({
     set({ user: sessionToUser(session) });
   },
 
+  bypassLogin: () => {
+    setBypassActive(true);
+    set({ user: BYPASS_USER, isBypass: true, isLoading: false });
+  },
+
   logout: async () => {
     try {
       await authApi.logout();
+    } catch {
+      // ignore — we're tearing down the session anyway
     } finally {
+      setBypassActive(false);
       clearStoredAuth();
-      set({ user: null });
+      set({ user: null, isBypass: false });
     }
   },
 }));
@@ -111,9 +150,11 @@ export function useAuth() {
       user: s.user,
       isAuthenticated: s.user !== null,
       isLoading: s.isLoading,
+      isBypass: s.isBypass,
       refreshSession: s.refreshSession,
       login: s.login,
       register: s.register,
+      bypassLogin: s.bypassLogin,
       logout: s.logout,
     }))
   );

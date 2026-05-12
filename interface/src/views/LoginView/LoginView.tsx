@@ -1,11 +1,13 @@
-import { Panel, Heading, Text } from "@cypher-asi/zui";
+import { Panel, Heading, Text, Button } from "@cypher-asi/zui";
 import { useLoginForm } from "./use-login-form";
 import { LoginForm } from "./LoginForm";
 import { ResetPasswordForm } from "./ResetPasswordForm";
+import { useAuthStore } from "../../stores/auth-store";
 import styles from "./LoginView.module.css";
 
 export function LoginView() {
   const f = useLoginForm();
+  const bypassLogin = useAuthStore((s) => s.bypassLogin);
 
   return (
     <div className={styles.page}>
@@ -18,7 +20,7 @@ export function LoginView() {
         >
           <div className={styles.header}>
             <Heading level={2}>
-              <span className={styles.brand}>SHELL</span>
+              <span className={styles.brand}>ZERO</span>
             </Heading>
             <Text variant="muted" size="sm" align="center" className={styles.subtitle}>
               Zero Identity Authentication
@@ -53,6 +55,22 @@ export function LoginView() {
               onSubmit={f.handleSubmit}
               onForgotPassword={f.openResetPassword}
             />
+          )}
+
+          {!f.showResetPassword && (
+            <div className={styles.bypass}>
+              <Text size="xs" variant="muted" align="center">
+                Development
+              </Text>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={bypassLogin}
+                className={styles.bypassButton}
+              >
+                Skip login (dev bypass)
+              </Button>
+            </div>
           )}
         </Panel>
       </div>
