@@ -1,6 +1,7 @@
 import { MessageSquare } from "lucide-react";
 import { ChatList } from "./ChatList";
 import { ChatMainPanel } from "./ChatMainPanel";
+import { ChatSidekick } from "./ChatSidekick";
 import type { ShellApp } from "../../shell/types";
 
 export const ChatApp: ShellApp = {
@@ -10,5 +11,6 @@ export const ChatApp: ShellApp = {
   basePath: "/chat",
   LeftPanel: ChatList,
   MainPanel: ChatMainPanel,
+  SidekickPanel: ChatSidekick,
   searchPlaceholder: "Search",
 };
