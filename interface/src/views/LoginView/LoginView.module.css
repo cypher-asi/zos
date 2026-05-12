@@ -5,6 +5,19 @@
   background: var(--color-bg);
 }
 
+.titlebarLeading {
+  display: inline-block;
+  width: 1px;
+  height: 1px;
+}
+
+.titlebarBrand {
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+}
+
 .container {
   display: flex;
   align-items: center;
@@ -12,6 +25,12 @@
   flex: 1;
   min-height: 0;
   padding: var(--space-4);
+}
+
+.cardTitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
 }
 
 .card {

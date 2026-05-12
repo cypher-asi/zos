@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useAuth } from "../../stores/auth-store";
-import { authApi, ApiClientError } from "../../api/auth";
+import { authApi } from "../../shared/api/auth";
+import { ApiClientError } from "../../shared/api/core";
 
 export type AuthTab = "signin" | "register";
 
@@ -19,10 +20,19 @@ function getAuthErrorMessage(err: unknown): string {
 }
 
 export function useLoginForm() {
-  const { login, register } = useAuth();
+  const { login, register, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const { redirect: redirectTo } = useSearch({ from: "/login" });
   const from = redirectTo ?? "/";
+
+  // If a session is restored asynchronously while the user sits on /login
+  // (e.g. desktop-side restoreSession completes after the form has mounted,
+  // or a background tab logs in), get the user off the login page without
+  // requiring a form submit.
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    navigate({ to: from, replace: true });
+  }, [from, isAuthenticated, isLoading, navigate]);
 
   const [activeTab, setActiveTab] = useState<AuthTab>("signin");
   const [email, setEmail] = useState("");

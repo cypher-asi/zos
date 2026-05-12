@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { projectsApi, type CreateProjectInput } from "../api/projects";
+import { projectsApi, type CreateProjectInput } from "../shared/api/projects";
 
 export const projectKeys = {
   all: ["projects"] as const,

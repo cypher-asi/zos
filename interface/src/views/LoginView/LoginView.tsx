@@ -1,24 +1,36 @@
 import { Panel, Heading, Text, Button } from "@cypher-asi/zui";
-import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useLoginForm } from "./use-login-form";
 import { LoginForm } from "./LoginForm";
 import { ResetPasswordForm } from "./ResetPasswordForm";
-import { useAuthStore } from "../../stores/auth-store";
+import {
+  isDevBypassAvailable,
+  useAuthStore,
+} from "../../stores/auth-store";
+import { ShellTitlebar } from "../../components/ShellTitlebar";
+import { WindowControls } from "../../components/WindowControls";
+import { useShellCapabilities } from "../../hooks/use-shell-capabilities";
 import styles from "./LoginView.module.css";
 
 export function LoginView() {
   const f = useLoginForm();
   const bypassLogin = useAuthStore((s) => s.bypassLogin);
-  const navigate = useNavigate();
-  const { redirect: redirectTo } = useSearch({ from: "/login" });
-
-  function handleBypass() {
-    bypassLogin();
-    navigate({ to: redirectTo ?? "/", replace: true });
-  }
+  const { hasDesktopBridge } = useShellCapabilities();
+  const showDevBypass = isDevBypassAvailable() && !f.showResetPassword;
 
   return (
     <div className={styles.page}>
+      {hasDesktopBridge ? (
+        <ShellTitlebar
+          icon={<span className={styles.titlebarLeading} aria-hidden="true" />}
+          title={
+            <span className="titlebar-center">
+              <span className={styles.titlebarBrand}>ZERO</span>
+            </span>
+          }
+          actions={<WindowControls />}
+        />
+      ) : null}
+
       <div className={styles.container}>
         <Panel
           variant="solid"
@@ -34,6 +46,10 @@ export function LoginView() {
               Zero Identity Authentication
             </Text>
           </div>
+
+          <Text align="center" className={styles.cardTitle}>
+            Login to ZERO
+          </Text>
 
           {f.showResetPassword ? (
             <ResetPasswordForm
@@ -65,18 +81,18 @@ export function LoginView() {
             />
           )}
 
-          {!f.showResetPassword && (
+          {showDevBypass && (
             <div className={styles.bypass}>
               <Text size="xs" variant="muted" align="center">
-                Development
+                Development build
               </Text>
               <Button
                 type="button"
                 variant="ghost"
-                onClick={handleBypass}
+                onClick={bypassLogin}
                 className={styles.bypassButton}
               >
-                Skip login (dev bypass)
+                Skip login (dev bypass — no real session)
               </Button>
             </div>
           )}

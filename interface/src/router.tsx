@@ -19,18 +19,25 @@ function PendingScreen() {
 }
 
 function waitForAuth() {
+  // We gate on `hasResolvedInitialSession` rather than `isLoading` because
+  // the auth store seeds `user` synchronously from localStorage at module
+  // import (see `seedAuthStateFromStorage` in stores/auth-store.ts). For a
+  // returning user, that seed already lets the router make the right
+  // decision on the very first navigation, and `restoreSession()` only
+  // needs to flip this flag on completion to unblock new navigations after
+  // a 401 has cleared the session.
   const state = useAuthStore.getState();
-  if (!state.isLoading) return Promise.resolve(state);
+  if (state.hasResolvedInitialSession) return Promise.resolve(state);
 
   return new Promise<ReturnType<typeof useAuthStore.getState>>((resolve) => {
     const unsub = useAuthStore.subscribe((s) => {
-      if (!s.isLoading) {
+      if (s.hasResolvedInitialSession) {
         unsub();
         resolve(s);
       }
     });
     const current = useAuthStore.getState();
-    if (!current.isLoading) {
+    if (current.hasResolvedInitialSession) {
       unsub();
       resolve(current);
     }

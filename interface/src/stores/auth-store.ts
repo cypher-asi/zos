@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import type { AuthSession, ZeroUser } from "../types/auth";
+import type { AuthSession, ZeroUser } from "../shared/types";
 import {
   clearStoredAuth,
+  getStoredJwt,
   getStoredSession,
+  isLoggedInSync,
   setStoredAuth,
-} from "../lib/auth-token";
-import { authApi, ApiClientError } from "../api/auth";
+} from "../shared/lib/auth-token";
+import { authApi } from "../shared/api/auth";
+import { ApiClientError } from "../shared/api/core";
 
 const BYPASS_STORAGE_KEY = "zero-dev-bypass";
 
@@ -20,7 +23,12 @@ const BYPASS_USER: ZeroUser = {
   is_zero_pro: false,
 };
 
+function isDevBuild(): boolean {
+  return Boolean(import.meta.env.DEV);
+}
+
 function isBypassActive(): boolean {
+  if (!isDevBuild()) return false;
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(BYPASS_STORAGE_KEY) === "1";
 }
@@ -47,6 +55,15 @@ interface AuthState {
   user: ZeroUser | null;
   isLoading: boolean;
   isBypass: boolean;
+  /**
+   * Flips `true` exactly once, after the first boot-time `restoreSession()`
+   * (or any login/register/logout) finishes. The router uses this — not
+   * `isLoading` — as the boot gate so a returning user with a cached session
+   * never sees a spinner: the store seeds `user` synchronously from
+   * localStorage in `seedAuthStateFromStorage()`, and the gate flips on the
+   * very first `set` from `restoreSession`.
+   */
+  hasResolvedInitialSession: boolean;
   restoreSession: () => Promise<void>;
   refreshSession: () => Promise<AuthSession>;
   login: (email: string, password: string) => Promise<void>;
@@ -54,30 +71,78 @@ interface AuthState {
     email: string,
     password: string,
     name: string,
-    inviteCode: string
+    inviteCode: string,
   ) => Promise<void>;
   bypassLogin: () => void;
   logout: () => Promise<void>;
 }
 
+/**
+ * Seed the auth store synchronously at module import using the same
+ * `isLoggedInSync()` primitive the router checks at boot. This guarantees
+ * the very first React paint already has the right `user` value for
+ * returning users — no login flash.
+ */
+function seedAuthStateFromStorage(): Pick<
+  AuthState,
+  "user" | "isLoading" | "isBypass" | "hasResolvedInitialSession"
+> {
+  if (isBypassActive()) {
+    return {
+      user: BYPASS_USER,
+      isLoading: false,
+      isBypass: true,
+      hasResolvedInitialSession: true,
+    };
+  }
+  if (isLoggedInSync()) {
+    const cached = getStoredSession();
+    if (cached) {
+      return {
+        user: sessionToUser(cached),
+        isLoading: false,
+        isBypass: false,
+        hasResolvedInitialSession: false,
+      };
+    }
+  }
+  return {
+    user: null,
+    isLoading: true,
+    isBypass: false,
+    hasResolvedInitialSession: false,
+  };
+}
+
 export const useAuthStore = create<AuthState>()((set) => ({
-  user: null,
-  isLoading: true,
-  isBypass: false,
+  ...seedAuthStateFromStorage(),
 
   restoreSession: async () => {
     if (isBypassActive()) {
-      set({ user: BYPASS_USER, isBypass: true, isLoading: false });
+      set({
+        user: BYPASS_USER,
+        isBypass: true,
+        isLoading: false,
+        hasResolvedInitialSession: true,
+      });
       return;
     }
 
-    const cached = getStoredSession();
-    if (cached) {
-      set({ user: sessionToUser(cached) });
+    // No JWT means there's nothing to restore — short-circuit so we don't
+    // burn a guaranteed-401 round-trip on every cold open.
+    if (!getStoredJwt()) {
+      set({
+        user: null,
+        isLoading: false,
+        hasResolvedInitialSession: true,
+      });
+      return;
     }
 
     try {
-      const validated = await authApi.validate();
+      // GET /api/auth/session uses the server's TTL cache for the second
+      // and later boots within the cache window, so this is cheap.
+      const validated = await authApi.getSession();
       setStoredAuth(validated);
       set({ user: sessionToUser(validated) });
     } catch (err) {
@@ -85,9 +150,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
         clearStoredAuth();
         set({ user: null });
       }
-      // Non-401 errors: keep cached session if available
+      // Non-401 (e.g. server unreachable): keep the seeded cached session.
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, hasResolvedInitialSession: true });
     }
   },
 
@@ -105,30 +170,46 @@ export const useAuthStore = create<AuthState>()((set) => ({
       }
       throw err;
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, hasResolvedInitialSession: true });
     }
   },
 
   login: async (email: string, password: string) => {
     const session = await authApi.login(email, password);
     setStoredAuth(session);
-    set({ user: sessionToUser(session) });
+    setBypassActive(false);
+    set({
+      user: sessionToUser(session),
+      isBypass: false,
+      hasResolvedInitialSession: true,
+    });
   },
 
   register: async (
     email: string,
     password: string,
     name: string,
-    inviteCode: string
+    inviteCode: string,
   ) => {
     const session = await authApi.register(email, password, name, inviteCode);
     setStoredAuth(session);
-    set({ user: sessionToUser(session) });
+    setBypassActive(false);
+    set({
+      user: sessionToUser(session),
+      isBypass: false,
+      hasResolvedInitialSession: true,
+    });
   },
 
   bypassLogin: () => {
+    if (!isDevBuild()) return;
     setBypassActive(true);
-    set({ user: BYPASS_USER, isBypass: true, isLoading: false });
+    set({
+      user: BYPASS_USER,
+      isBypass: true,
+      isLoading: false,
+      hasResolvedInitialSession: true,
+    });
   },
 
   logout: async () => {
@@ -139,7 +220,11 @@ export const useAuthStore = create<AuthState>()((set) => ({
     } finally {
       setBypassActive(false);
       clearStoredAuth();
-      set({ user: null, isBypass: false });
+      set({
+        user: null,
+        isBypass: false,
+        hasResolvedInitialSession: true,
+      });
     }
   },
 }));
@@ -151,11 +236,14 @@ export function useAuth() {
       isAuthenticated: s.user !== null,
       isLoading: s.isLoading,
       isBypass: s.isBypass,
+      hasResolvedInitialSession: s.hasResolvedInitialSession,
       refreshSession: s.refreshSession,
       login: s.login,
       register: s.register,
       bypassLogin: s.bypassLogin,
       logout: s.logout,
-    }))
+    })),
   );
 }
+
+export const isDevBypassAvailable = isDevBuild;

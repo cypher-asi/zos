@@ -2,6 +2,7 @@ import { Button, useTheme } from "@cypher-asi/zui";
 import { Sun, Moon } from "lucide-react";
 import { ShellTitlebar } from "../ShellTitlebar";
 import { WindowControls } from "../WindowControls";
+import { UserMenuButton } from "./UserMenuButton";
 import styles from "./DesktopShell.module.css";
 
 interface DesktopTitlebarProps {
@@ -70,6 +71,7 @@ export function DesktopTitlebar({
           className={styles.titleActions}
           onDoubleClick={(e) => e.stopPropagation()}
         >
+          <UserMenuButton />
           <ThemeToggleButton />
           <WindowControls
             sidekickCollapsed={sidekickCollapsed}
