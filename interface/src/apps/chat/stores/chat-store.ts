@@ -1,6 +1,9 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import type { Conversation, Message } from "../types";
 import { SEED_CONVERSATIONS, SEED_MESSAGES } from "../data/seed";
+
+const EMPTY_MESSAGES: Message[] = [];
 
 interface ChatState {
   conversations: Conversation[];
@@ -57,11 +60,12 @@ export const useChatStore = create<ChatState>()((set) => ({
 }));
 
 export function useSortedConversations(): Conversation[] {
-  return useChatStore((s) => {
-    const list = [...s.conversations];
+  const conversations = useChatStore((s) => s.conversations);
+  return useMemo(() => {
+    const list = [...conversations];
     list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return list;
-  });
+  }, [conversations]);
 }
 
 export function useConversation(id: string | null | undefined): Conversation | undefined {
@@ -71,5 +75,7 @@ export function useConversation(id: string | null | undefined): Conversation | u
 }
 
 export function useMessages(id: string | null | undefined): Message[] {
-  return useChatStore((s) => (id ? s.messagesByConversationId[id] ?? [] : []));
+  return useChatStore((s) =>
+    id ? s.messagesByConversationId[id] ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
+  );
 }
