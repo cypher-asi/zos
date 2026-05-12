@@ -1,0 +1,185 @@
+.desktopShell {
+  position: relative;
+  isolation: isolate;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+.backgroundLayer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.desktopContent {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: transparent;
+  margin: 0 5px;
+  border-radius: 6px;
+}
+
+.mainPanelHost {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+/*
+ * In desktop mode the Desktop app's MainPanel is an invisible
+ * marquee/context-menu surface layered over the wallpaper-backed
+ * BackgroundLayer. The opaque `background: var(--color-bg)` above
+ * would paint a solid rectangle over the wallpaper, so clear it
+ * (and the inset border that separates the main panel from the
+ * sidekick) when the shell is in desktop mode.
+ */
+.desktopShell[data-desktop-mode] .mainPanelHost {
+  background: transparent;
+}
+
+.desktopShell[data-desktop-mode] .mainPanelHostWithSidekick {
+  box-shadow: none;
+}
+
+.mainPanelHostWithSidekick {
+  box-shadow: inset -1px 0 0 0 var(--color-border);
+}
+
+.windowLayerHost {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.desktopSidebar {
+  flex-shrink: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-right: 2px;
+  background: var(--color-sidebar-bg);
+}
+
+:global([data-desktop-mode]) .desktopSidebar {
+  background: transparent;
+}
+
+.desktopSidebarBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.panelActive {
+  display: contents;
+}
+
+.panelHidden {
+  display: none;
+}
+
+.sidekickPanels {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-sidekick-bg);
+}
+
+.sidekickHeaderSlot {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+}
+
+.sidekickPanelSlot {
+  --sidekick-fade-height: 36px;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidekickPanelSlot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--sidekick-fade-height);
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--color-bg, #111) 42%, transparent) 38%,
+    color-mix(in srgb, var(--color-bg, #111) 92%, black) 100%
+  );
+}
+
+.sidekickLane {
+  margin-left: 2px;
+  background: var(--color-sidekick-bg);
+}
+
+.titleLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Match the inner WindowControls row (gap: 0) so every chrome icon —
+   theme toggle, host-settings, sidekick toggle, min/max/close — sits on
+   the same rhythm and renders as a single uniform button strip. */
+.titleActions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.titleCenter {
+  user-select: none;
+}
+
+.titleLogo {
+  height: 11px;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+.titleLeading {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  gap: var(--space-1);
+}
+
+.desktopSidebar,
+.desktopSidebar * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.desktopSidebar input,
+.desktopSidebar textarea,
+.desktopSidebar [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}

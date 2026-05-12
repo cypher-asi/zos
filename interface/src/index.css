@@ -1,0 +1,103 @@
+/* Keyboard-only focus ring (mouse clicks never paint a ring). */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+#root:focus,
+#root:focus-visible,
+.titlebar-drag:focus,
+.titlebar-drag:focus-visible,
+[tabindex="-1"]:focus,
+[tabindex="-1"]:focus-visible,
+[role="dialog"]:focus,
+[role="dialog"]:focus-visible,
+[aria-modal="true"]:focus,
+[aria-modal="true"]:focus-visible {
+  outline: none;
+}
+
+:root {
+  color-scheme: light dark;
+  --font-sans: 'Inter Variable', sans-serif;
+
+  /*
+   * Shell chrome tokens shared by every surface that participates in the
+   * floating "pill" chrome (ShellTitlebar at the top, BottomTaskbar at the
+   * bottom). Defining them at :root means siblings of the chrome resolve the
+   * same values as the chrome itself — custom properties only inherit
+   * downward, so we cannot scope them to one element and still have a
+   * sibling read them.
+   */
+  --shell-chrome-height: var(--control-height-sm);
+  --shell-chrome-inset: 5px;
+  --shell-chrome-outer-height: calc(var(--shell-chrome-height) + 10px);
+  --shell-chrome-radius: 20px;
+  --shell-chrome-background: color-mix(in srgb, var(--color-titlebar-bg) 90%, transparent);
+  --shell-chrome-backdrop-filter: blur(40px) saturate(1.4);
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  background: var(--color-bg);
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html:has([role="dialog"][aria-modal="true"]),
+body:has([role="dialog"][aria-modal="true"]) {
+  overflow: hidden;
+}
+
+.titlebar-drag {
+  -webkit-app-region: drag;
+  height: var(--control-height-sm);
+  position: relative;
+  padding-left: 13px;
+  padding-right: var(--space-2);
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-drag a,
+.titlebar-drag button,
+.titlebar-drag input {
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.titlebar-center a {
+  pointer-events: auto;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

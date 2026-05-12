@@ -1,0 +1,106 @@
+.bar {
+  --taskbar-item-size: 28px;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: var(--shell-chrome-outer-height, calc(var(--control-height-sm) + 18px));
+  min-height: var(--shell-chrome-outer-height, calc(var(--control-height-sm) + 18px));
+  background: transparent;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: var(--shell-chrome-inset, 5px);
+}
+
+.left,
+.center,
+.right {
+  height: var(--shell-chrome-height, calc(var(--control-height-sm) + 8px));
+  min-height: var(--shell-chrome-height, calc(var(--control-height-sm) + 8px));
+  background: var(--shell-chrome-background, color-mix(in srgb, var(--color-bg) 90%, transparent));
+  backdrop-filter: var(--shell-chrome-backdrop-filter, blur(40px) saturate(1.4));
+  -webkit-backdrop-filter: var(--shell-chrome-backdrop-filter, blur(40px) saturate(1.4));
+  border: 1px solid var(--color-border);
+  border-radius: var(--shell-chrome-radius, 20px);
+  box-sizing: border-box;
+  /* Consistent breathing room at the start/end of every pill so icons
+     don't sit flush against the rounded corners. */
+  padding: 0 var(--space-2);
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.favorites {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.openIndicator {
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.rightPrimary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.creditsSummary,
+.clock {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-2xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-height: var(--taskbar-item-size);
+  line-height: 1;
+  user-select: none;
+}
+
+.creditsSummary {
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface-hover) 70%, transparent);
+}
+
+.clock {
+  padding: 0 4px;
+}

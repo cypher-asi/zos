@@ -1,0 +1,6 @@
+/target
+.env
+interface/node_modules
+interface/dist
+.cursor
+*.log

@@ -1,0 +1,189 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 42px;
+  flex-shrink: 0;
+  padding: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+:global([data-desktop-mode]) .rail {
+  border-right: none;
+  background: transparent;
+}
+
+.orgIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: var(--control-height-sm, 32px);
+}
+
+.appGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* ── NavRailButton base ── */
+
+.navBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  border-radius: var(--radius-md);
+  opacity: 0.6;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.navBtn svg {
+  stroke-width: 1.5;
+}
+
+.navBtn:hover {
+  opacity: 1;
+  color: var(--color-text-primary);
+}
+
+.navBtn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.navBtnSelected {
+  color: var(--color-text-primary);
+  opacity: 1;
+}
+
+/* ── Rail hover override (keep transparent bg) ── */
+
+.rail .navBtn:hover {
+  background-color: transparent;
+}
+
+/* ── Spacer ── */
+
+.spacer {
+  flex: 1;
+}
+
+/* ── Floating groups (desktop mode) ── */
+
+.floatingGroupMiddle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  padding: 14px 0;
+}
+
+:global([data-desktop-mode]) .floatingGroupMiddle {
+  background: color-mix(in srgb, var(--color-bg) 90%, transparent);
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+  border-radius: 0 4px 4px 0;
+}
+
+/* ── Bar layout ── */
+
+.bar {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+
+.taskbar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.barGroup {
+  display: contents;
+}
+
+.taskbarGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.navBarBtn {
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 6px;
+  min-width: 0;
+  min-height: 56px;
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.navBarBtn.navBtnSelected {
+  background: var(--color-bg-hover);
+}
+
+.taskbarBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--taskbar-item-size, 28px);
+  height: var(--taskbar-item-size, 28px);
+  min-width: var(--taskbar-item-size, 28px);
+  min-height: var(--taskbar-item-size, 28px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  opacity: 0.6;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast),
+    transform 140ms ease;
+  touch-action: none;
+  user-select: none;
+}
+
+.taskbarBtn:not(:disabled):hover {
+  color: var(--color-text-primary);
+  opacity: 1;
+  background: var(--color-overlay-light);
+}
+
+.taskbarBtn:not(:disabled)[aria-pressed="true"],
+.taskbarBtn:not(:disabled)[data-selected="true"] {
+  color: var(--color-text-primary);
+  opacity: 1;
+}
+
+.taskbarBtn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.taskbarDragOverlay {
+  position: fixed;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 1;
+  color: var(--color-text-primary);
+  transition: none;
+}

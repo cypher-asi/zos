@@ -1,0 +1,28 @@
+export interface AuthSession {
+  user_id: string;
+  display_name: string;
+  profile_image: string;
+  primary_zid: string;
+  zero_wallet: string;
+  wallets: string[];
+  is_zero_pro?: boolean;
+  zero_pro_refresh_error?: string;
+  access_token?: string;
+  created_at: string;
+  validated_at: string;
+}
+
+export interface ZeroUser {
+  user_id: string;
+  display_name: string;
+  profile_image: string;
+  primary_zid: string;
+  zero_wallet: string;
+  wallets: string[];
+  is_zero_pro?: boolean;
+}
+
+export interface ApiError {
+  error: string;
+  code?: string;
+}
