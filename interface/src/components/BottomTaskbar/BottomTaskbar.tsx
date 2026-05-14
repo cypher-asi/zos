@@ -1,19 +1,111 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Circle,
   ChevronRight,
   ChevronLeft,
   LayoutGrid,
+  LogOut,
+  Moon,
   Settings,
+  Sun,
+  User,
 } from "lucide-react";
+import { MenuDropdown, useTheme, type MenuDropdownItem } from "@cypher-asi/zui";
 import { useActiveApp } from "../../hooks/use-active-app";
 import { useAppUIStore } from "../../stores/app-ui-store";
+import { useAuth } from "../../stores/auth-store";
 import { getTaskbarAppsCollapsed, setTaskbarAppsCollapsed } from "../../utils/storage";
 import { useNavigate } from "../../lib/router-adapter";
 import { AppNavRail, TaskbarIconButton, TASKBAR_ICON_SIZE } from "../AppNavRail";
 import styles from "./BottomTaskbar.module.css";
 
 const TASKBAR_CHEVRON_SIZE = TASKBAR_ICON_SIZE + 1;
+
+const THEME_ICON_BY_KIND = {
+  sun: Sun,
+  moon: Moon,
+} as const;
+
+type ThemeKind = keyof typeof THEME_ICON_BY_KIND;
+type ThemeValue = "light" | "dark" | "system";
+
+function resolveThemeIconKind(
+  theme: ThemeValue,
+  resolved: "light" | "dark",
+): ThemeKind {
+  if (theme === "system") return resolved === "light" ? "sun" : "moon";
+  return theme === "light" ? "sun" : "moon";
+}
+
+function nextTheme(theme: ThemeValue): ThemeValue {
+  if (theme === "light") return "dark";
+  if (theme === "dark") return "system";
+  return "light";
+}
+
+function ThemeToggleButton() {
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  const kind = resolveThemeIconKind(theme as ThemeValue, resolvedTheme);
+  const Icon = THEME_ICON_BY_KIND[kind];
+
+  return (
+    <TaskbarIconButton
+      icon={<Icon size={TASKBAR_ICON_SIZE} />}
+      title={`Theme: ${theme}`}
+      aria-label={`Theme: ${theme}`}
+      onClick={() => setTheme(nextTheme(theme as ThemeValue))}
+    />
+  );
+}
+
+function UserMenuButton() {
+  const { user, isBypass, logout } = useAuth();
+
+  const items: MenuDropdownItem[] = useMemo(
+    () => [
+      {
+        id: "signed-in-as",
+        label: user
+          ? `Signed in as ${user.display_name || user.primary_zid || "user"}${
+              isBypass ? " (dev bypass)" : ""
+            }`
+          : "Not signed in",
+        icon: <User size={14} />,
+        disabled: true,
+        onClick: () => undefined,
+      },
+      { id: "divider", label: "", divider: true, onClick: () => undefined },
+      {
+        id: "logout",
+        label: "Sign out",
+        icon: <LogOut size={14} />,
+        danger: true,
+        onClick: () => {
+          void logout();
+        },
+      },
+    ],
+    [user, isBypass, logout],
+  );
+
+  if (!user) return null;
+
+  const label = user.display_name || user.primary_zid || "Account";
+
+  return (
+    <MenuDropdown
+      items={items}
+      align="right"
+      trigger={
+        <TaskbarIconButton
+          icon={<User size={TASKBAR_ICON_SIZE} />}
+          title={label}
+          aria-label={`Account menu for ${label}`}
+        />
+      }
+    />
+  );
+}
 
 function useClock() {
   const [now, setNow] = useState(() => new Date());
@@ -88,6 +180,8 @@ export function BottomTaskbar() {
       </div>
 
       <div className={styles.right}>
+        <ThemeToggleButton />
+        <UserMenuButton />
         <TaskbarIconButton
           icon={<Settings size={TASKBAR_ICON_SIZE} />}
           title="Settings"
