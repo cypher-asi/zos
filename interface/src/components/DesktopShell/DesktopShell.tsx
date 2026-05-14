@@ -24,10 +24,7 @@ import { DesktopTitlebar } from "./DesktopTitlebar";
 import { PersistentSidekickLane } from "./PersistentSidekickLane";
 import { SidebarSearchInput } from "./SidebarSearchInput";
 import { SidekickPortalBridge } from "./SidekickPortalBridge";
-import {
-  useLeftPanelWidthCssVar,
-  useSidekickWidthRetargeting,
-} from "./desktop-shell-effects";
+import { useLeftPanelWidthCssVar } from "./desktop-shell-effects";
 import styles from "./DesktopShell.module.css";
 
 interface DesktopShellProps {
@@ -51,15 +48,8 @@ export function DesktopShell({ children }: DesktopShellProps) {
   const closeSettingsModal = useAppUIStore((s) => s.closeSettingsModal);
 
   const leftPanelRef = useRef<HTMLDivElement>(null);
-  const [mainPanelEl, setMainPanelEl] = useState<HTMLDivElement | null>(null);
-  const handleMainPanelRef = useCallback((node: HTMLDivElement | null) => {
-    setMainPanelEl(node);
-  }, []);
   const sidekickResizeControlsRef = useRef<LaneResizeControls | null>(null);
-  const appliedSidekickAppIdRef = useRef<string | null>(null);
-  const [sidekickInitialWidth] = useState(() =>
-    readStoredSidekickWidth(activeApp.id),
-  );
+  const [sidekickInitialWidth] = useState(() => readStoredSidekickWidth());
   const [sidekickHeaderTarget, setSidekickHeaderTarget] =
     useState<HTMLDivElement | null>(null);
   const [sidekickPanelTarget, setSidekickPanelTarget] =
@@ -95,24 +85,14 @@ export function DesktopShell({ children }: DesktopShellProps) {
     [],
   );
 
-  const handleSidekickResizeEnd = useCallback(
-    (size: number) => {
-      persistSidekickWidth(activeApp.id, size);
-    },
-    [activeApp.id],
-  );
+  const handleSidekickResizeEnd = useCallback((size: number) => {
+    persistSidekickWidth(size);
+  }, []);
 
   useLeftPanelWidthCssVar({
     leftPanelRef,
     isDesktop,
     activeAppId: activeApp.id,
-  });
-  useSidekickWidthRetargeting({
-    activeAppId: activeApp.id,
-    sidekickCollapsed,
-    mainPanelEl,
-    sidekickResizeControlsRef,
-    appliedSidekickAppIdRef,
   });
 
   return (
@@ -156,7 +136,6 @@ export function DesktopShell({ children }: DesktopShellProps) {
           </div>
 
           <div
-            ref={handleMainPanelRef}
             className={
               sidekickHostCollapsed
                 ? `${styles.mainPanelHost} ${styles.mainPanelHostNoSidekick}`

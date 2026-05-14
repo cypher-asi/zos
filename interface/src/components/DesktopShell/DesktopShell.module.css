@@ -149,6 +149,16 @@
   border-bottom-right-radius: 6px;
 }
 
+/*
+ * When the sidekick lane collapses to 0 width its 2px margin and 1px
+ * border would still render as a thin vertical sliver against the main
+ * panel. Drop the chrome so the frame closes cleanly.
+ */
+.sidekickLane[data-collapsed] {
+  margin-left: 0;
+  border-color: transparent;
+}
+
 .desktopShell[data-desktop-mode] .sidekickLane {
   border-color: transparent;
 }

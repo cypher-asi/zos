@@ -143,6 +143,7 @@ export const Lane = forwardRef<HTMLDivElement, LaneProps>(
         ref={laneRef}
         data-lane
         data-resizing={isResizing || undefined}
+        data-collapsed={collapsed || undefined}
         className={cn(
           styles.lane,
           flex && styles.laneFlex,

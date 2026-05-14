@@ -29,7 +29,7 @@ export const useAppUIStore = create<AppUIState>()((set) => ({
   visitedAppIds: new Set<string>(),
   sidebarQueries: {},
   sidebarActions: {},
-  sidekickCollapsed: false,
+  sidekickCollapsed: true,
   appsModalOpen: false,
   backgroundModalOpen: false,
   settingsModalOpen: false,
