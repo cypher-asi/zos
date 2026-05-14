@@ -105,24 +105,6 @@ const chatConversationRoute = createRoute({
   component: () => null,
 });
 
-const zeroRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: "zero",
-  component: () => null,
-});
-
-const projectsRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: "projects",
-  component: () => null,
-});
-
-const projectDetailRoute = createRoute({
-  getParentRoute: () => projectsRoute,
-  path: "$projectId",
-  component: () => null,
-});
-
 const exploreRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "explore",
@@ -141,8 +123,6 @@ const routeTree = rootRoute.addChildren([
     shellRoute.addChildren([
       indexRoute,
       chatRoute.addChildren([chatConversationRoute]),
-      zeroRoute,
-      projectsRoute.addChildren([projectDetailRoute]),
       exploreRoute,
       desktopRoute,
     ]),
