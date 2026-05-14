@@ -51,12 +51,7 @@ export function ChatConversationRow({
       />
       <span className={styles.body}>
         <span className={styles.top}>
-          <span className={styles.name}>
-            {conversation.name}
-            {conversation.roleBadge && (
-              <span className={styles.roleBadge}>{conversation.roleBadge}</span>
-            )}
-          </span>
+          <span className={styles.name}>{conversation.name}</span>
           <span className={styles.time}>{formatTime(conversation.updatedAt)}</span>
         </span>
         <span className={styles.preview}>{conversation.lastSnippet}</span>
