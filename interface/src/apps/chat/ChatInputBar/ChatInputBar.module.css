@@ -1,24 +1,109 @@
 .bar {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3) var(--space-3);
   background: var(--color-bg);
 }
 
-.inputWrap {
-  flex: 1;
-  min-width: 0;
+.composer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-input-border);
+  border-radius: 18px;
+  transition: border-color var(--transition-fast);
 }
 
-.textarea {
-  width: 100%;
-  resize: none;
+.composer:focus-within {
+  border-color: var(--color-input-border-hover);
+}
+
+.attachButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--color-input-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.attachButton:hover {
+  background: var(--color-overlay-light);
+  border-color: var(--color-input-border-hover);
+  color: var(--color-text-primary);
+}
+
+.attachButton:focus-visible {
+  outline: 2px solid var(--color-overlay-focus);
+  outline-offset: 1px;
+}
+
+.composer .textarea {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 4px var(--space-1);
+  min-height: 24px;
   max-height: 160px;
-  min-height: 38px;
+  resize: none;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.composer .textarea:hover,
+.composer .textarea:focus,
+.composer .textarea:focus-visible {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+.composer .textarea::placeholder {
+  color: var(--color-text-muted);
 }
 
 .sendButton {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-text-primary);
+  color: var(--color-bg);
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.sendButton:not(:disabled):hover {
+  background: var(--color-inverse);
+}
+
+.sendButton:focus-visible {
+  outline: 2px solid var(--color-overlay-focus);
+  outline-offset: 2px;
+}
+
+.sendButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }

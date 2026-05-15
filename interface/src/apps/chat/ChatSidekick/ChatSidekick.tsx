@@ -5,7 +5,6 @@ import {
   BellOff,
   FileText,
   Forward,
-  Gift,
   Image as ImageIcon,
   Link2,
   MessageSquare,
@@ -117,9 +116,6 @@ function ProfileView({ conversation }: ProfileViewProps) {
         />
         <div className={styles.nameLine}>
           <span className={styles.name}>{conversation.name}</span>
-          {conversation.roleBadge ? (
-            <span className={styles.roleBadge}>{conversation.roleBadge}</span>
-          ) : null}
         </div>
         {conversation.lastSeen ? (
           <Text variant="muted" size="xs" className={styles.lastSeen}>
@@ -136,17 +132,10 @@ function ProfileView({ conversation }: ProfileViewProps) {
           active={muted}
           onClick={() => setMuted((prev) => !prev)}
         />
-        <ActionButton icon={Gift} label="Gift" />
       </section>
 
-      {(conversation.phone || conversation.bio || conversation.username) && (
+      {(conversation.bio || conversation.username) && (
         <section className={styles.infoSection}>
-          {conversation.phone ? (
-            <InfoRow
-              value={conversation.phone}
-              label={conversation.phoneLabel ?? "Mobile"}
-            />
-          ) : null}
           {conversation.bio ? (
             <InfoRow value={conversation.bio} label="Bio" />
           ) : null}
@@ -167,12 +156,6 @@ function ProfileView({ conversation }: ProfileViewProps) {
           ) : null}
         </section>
       )}
-
-      <section className={styles.contactsRow}>
-        <button type="button" className={styles.addContactButton}>
-          ADD TO CONTACTS
-        </button>
-      </section>
 
       <section className={styles.countsSection}>
         {conversation.photosCount != null ? (

@@ -6,8 +6,8 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from "react";
-import { SendHorizontal } from "lucide-react";
-import { Button, Textarea } from "@cypher-asi/zui";
+import { ArrowUp, Plus } from "lucide-react";
+import { Textarea } from "@cypher-asi/zui";
 import { useChatStore } from "../stores/chat-store";
 import styles from "./ChatInputBar.module.css";
 
@@ -52,29 +52,38 @@ export function ChatInputBar({ conversationId }: ChatInputBarProps) {
     [handleSend],
   );
 
+  const canSend = draft.trim().length > 0;
+
   return (
     <div className={styles.bar}>
-      <div className={styles.inputWrap}>
+      <div className={styles.composer}>
+        <button
+          type="button"
+          className={styles.attachButton}
+          aria-label="Add attachment"
+        >
+          <Plus size={14} />
+        </button>
         <Textarea
           ref={textareaRef}
           className={styles.textarea}
-          placeholder="Message"
+          placeholder="Write a message…"
           value={draft}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           rows={1}
           aria-label="Message input"
         />
+        <button
+          type="button"
+          className={styles.sendButton}
+          onClick={handleSend}
+          disabled={!canSend}
+          aria-label="Send message"
+        >
+          <ArrowUp size={14} strokeWidth={2.5} />
+        </button>
       </div>
-      <Button
-        variant="primary"
-        iconOnly
-        icon={<SendHorizontal size={16} />}
-        onClick={handleSend}
-        disabled={draft.trim().length === 0}
-        aria-label="Send message"
-        className={styles.sendButton}
-      />
     </div>
   );
 }

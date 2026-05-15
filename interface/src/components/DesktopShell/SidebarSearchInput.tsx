@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search } from "@cypher-asi/zui";
+import { PanelSearch } from "../PanelSearch";
 import { useActiveApp } from "../../hooks/use-active-app";
 import { useAppUIStore } from "../../stores/app-ui-store";
 
@@ -15,19 +15,12 @@ export function SidebarSearchInput() {
   const [draft, setDraft] = useState(initialQuery);
 
   return (
-    <Search
-      size="sm"
+    <PanelSearch
       placeholder={activeApp.searchPlaceholder ?? "Search"}
       value={draft}
-      onChange={(event) => {
-        const value = event.target.value;
+      onChange={(value) => {
         setDraft(value);
         setSidebarQuery(activeApp.id, value);
-      }}
-      showClear
-      onClear={() => {
-        setDraft("");
-        setSidebarQuery(activeApp.id, "");
       }}
     />
   );

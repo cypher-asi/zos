@@ -27,7 +27,7 @@ export function ChatMainPanel() {
         <Avatar
           name={conversation.name}
           src={conversation.avatarUrl}
-          size="md"
+          size="sm"
         />
         <div className={styles.headerText}>
           <span className={styles.headerName}>

@@ -39,7 +39,7 @@
 
 .bubbleUser {
   background: var(--color-accent, var(--color-overlay-heavy));
-  color: var(--color-text-primary);
+  color: var(--color-accent-contrast, var(--color-text-primary));
   border-bottom-right-radius: 4px;
 }
 
