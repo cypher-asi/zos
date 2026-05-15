@@ -6,10 +6,19 @@
 //! in-memory. To preserve the HTTP-facing semantics of the older `zero-sdk`
 //! façade (an identity that survives across restarts, machine keys with
 //! capability bitflags, monotonically-increasing epoch), this module owns
-//! two small JSON files:
+//! two on-disk artefacts under `<data_dir>/identity/`:
 //!
-//! * `<data_dir>/identity/identity.json` — the active [`PersistedIdentity`].
-//! * `<data_dir>/identity/devices.json`  — the [`PersistedDevices`] list.
+//! * `identity.json`   — the active [`PersistedIdentity`] (Shamir-shared
+//!   `NeuralKey` plus public-id / epoch metadata).
+//! * `devices.sealed`  — the [`zero_sdk::MachineKeyStore`] round-tripped
+//!   through [`MachineKeyStore::to_sealed_bytes`] /
+//!   [`MachineKeyStore::from_sealed_bytes`] (Phase D1). Holds the full
+//!   key pairs, so derived devices can sign / decapsulate after a
+//!   process restart.
+//!
+//! The legacy `devices.json` file (public summaries only, no secret
+//! halves) is read once on migration and then ignored; secrets that
+//! were generated under the old scheme are unrecoverable.
 //!
 //! The `NeuralKey` itself is round-tripped through Shamir 2-of-2 because
 //! that's the only public path back from raw bytes to a `NeuralKey` value
@@ -21,12 +30,19 @@ use serde::{Deserialize, Serialize};
 use zero_identity::neural_key::{
     recover_neural_key, split_neural_key, NeuralKey, NeuralKeyShares, ShareConfig,
 };
+use zero_sdk::MachineKeyStore;
 
 use crate::error::GridFacadeError;
 
 const IDENTITY_DIR: &str = "identity";
 const IDENTITY_FILE: &str = "identity.json";
-const DEVICES_FILE: &str = "devices.json";
+/// Legacy device list (public summaries only). Read on migration but
+/// never written by Phase-D1 code paths.
+const LEGACY_DEVICES_FILE: &str = "devices.json";
+/// Sealed device store (full key pairs + seeds, ChaCha20-Poly1305 with
+/// HKDF-SHA256 key derived from the owning `NeuralKey`). Authoritative
+/// on-disk source going forward.
+const SEALED_DEVICES_FILE: &str = "devices.sealed";
 
 /// 2-of-2 Shamir split is used purely as a public API for serialising the
 /// otherwise-opaque [`NeuralKey`] bytes. Storing both shares side-by-side
@@ -93,8 +109,16 @@ pub fn identity_path(data_dir: &Path) -> PathBuf {
     identity_dir(data_dir).join(IDENTITY_FILE)
 }
 
-pub fn devices_path(data_dir: &Path) -> PathBuf {
-    identity_dir(data_dir).join(DEVICES_FILE)
+/// Legacy `devices.json` (public-only) path. Only used by the
+/// migration code path; new code reads / writes
+/// [`sealed_devices_path`] instead.
+pub fn legacy_devices_path(data_dir: &Path) -> PathBuf {
+    identity_dir(data_dir).join(LEGACY_DEVICES_FILE)
+}
+
+/// Sealed device-store path (`devices.sealed`).
+pub fn sealed_devices_path(data_dir: &Path) -> PathBuf {
+    identity_dir(data_dir).join(SEALED_DEVICES_FILE)
 }
 
 /// Path that the old `zero_sdk::runtime` used to mark "identity exists".
@@ -157,25 +181,91 @@ pub fn write_identity(data_dir: &Path, record: &PersistedIdentity) -> Result<(),
 
 // ── Devices I/O ───────────────────────────────────────────────────────────
 
-pub fn read_devices(data_dir: &Path) -> Result<PersistedDevices, GridFacadeError> {
-    let path = devices_path(data_dir);
+/// Read the sealed device store from `<data_dir>/identity/devices.sealed`.
+///
+/// Returns `Ok(None)` when the file is absent (fresh install or
+/// post-`create_identity` reset). Errors propagate
+/// [`MachineKeyStore::from_sealed_bytes`] failures as
+/// `GridFacadeError::Identity` so callers can surface a 5xx with a
+/// useful message.
+pub fn read_sealed_devices(
+    data_dir: &Path,
+    neural_key: &NeuralKey,
+) -> Result<Option<MachineKeyStore>, GridFacadeError> {
+    let path = sealed_devices_path(data_dir);
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            let store = MachineKeyStore::from_sealed_bytes(neural_key, &bytes)
+                .map_err(|e| GridFacadeError::Identity(format!("unseal devices: {e}")))?;
+            Ok(Some(store))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(GridFacadeError::Io(e)),
+    }
+}
+
+/// Atomically seal `store` to `<data_dir>/identity/devices.sealed`.
+///
+/// Writes the new sealed bytes to a `.tmp` sibling, then renames over
+/// the destination, so a crash mid-write never corrupts the existing
+/// blob. On Unix the temp file is chmod'd to `0600` before rename so
+/// the secret material is never world-readable.
+pub fn write_sealed_devices(
+    data_dir: &Path,
+    neural_key: &NeuralKey,
+    store: &MachineKeyStore,
+) -> Result<(), GridFacadeError> {
+    std::fs::create_dir_all(identity_dir(data_dir))?;
+    let path = sealed_devices_path(data_dir);
+    let tmp = path.with_extension("sealed.tmp");
+    let bytes = store
+        .to_sealed_bytes(neural_key)
+        .map_err(|e| GridFacadeError::Identity(format!("seal devices: {e}")))?;
+    std::fs::write(&tmp, &bytes)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&tmp)?.permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(&tmp, perms)?;
+    }
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// Delete the sealed device store, if it exists.
+///
+/// Used by `create_identity` to ensure a re-created identity does not
+/// inherit stale machine keys from a prior install.
+pub fn remove_sealed_devices(data_dir: &Path) -> Result<(), GridFacadeError> {
+    let path = sealed_devices_path(data_dir);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(GridFacadeError::Io(e)),
+    }
+}
+
+/// Read the legacy `devices.json` file, if any. Only used by the
+/// migration path -- new code paths exclusively read / write the
+/// sealed blob.
+///
+/// # Migration semantics
+///
+/// Pre-D1 device records held only public verifying keys (no seeds),
+/// so secrets generated under that scheme are unrecoverable across a
+/// restart. If callers find `devices.json` present alongside an
+/// absent `devices.sealed`, they SHOULD log a one-line warning and
+/// continue with a fresh sealed store; the next `register_machine`
+/// will populate it.
+pub fn read_legacy_devices(data_dir: &Path) -> Result<PersistedDevices, GridFacadeError> {
+    let path = legacy_devices_path(data_dir);
     match std::fs::read(&path) {
         Ok(bytes) => serde_json::from_slice(&bytes)
             .map_err(|e| GridFacadeError::Identity(format!("parse {}: {e}", path.display()))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PersistedDevices::default()),
         Err(e) => Err(GridFacadeError::Io(e)),
     }
-}
-
-pub fn write_devices(data_dir: &Path, devices: &PersistedDevices) -> Result<(), GridFacadeError> {
-    std::fs::create_dir_all(identity_dir(data_dir))?;
-    let path = devices_path(data_dir);
-    let tmp = path.with_extension("json.tmp");
-    let bytes = serde_json::to_vec_pretty(devices)
-        .map_err(|e| GridFacadeError::Identity(format!("encode devices: {e}")))?;
-    std::fs::write(&tmp, &bytes)?;
-    std::fs::rename(&tmp, &path)?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -224,29 +314,52 @@ mod tests {
     }
 
     #[test]
-    fn read_devices_returns_empty_on_fresh_dir() {
+    fn read_sealed_devices_returns_none_on_fresh_dir() {
         let dir = tempdir().unwrap();
-        let devs = read_devices(dir.path()).unwrap();
+        let key = NeuralKey::generate().unwrap();
+        let loaded = read_sealed_devices(dir.path(), &key).unwrap();
+        assert!(loaded.is_none());
+    }
+
+    #[test]
+    fn read_legacy_devices_returns_empty_on_fresh_dir() {
+        let dir = tempdir().unwrap();
+        let devs = read_legacy_devices(dir.path()).unwrap();
         assert!(devs.devices.is_empty());
     }
 
     #[test]
-    fn write_then_read_devices_round_trip() {
+    fn write_then_read_sealed_devices_round_trips_machine_ids() {
         let dir = tempdir().unwrap();
-        let devs = PersistedDevices {
-            devices: vec![PersistedDevice {
-                machine_id: "11".repeat(16),
-                identity_id: "22".repeat(16),
-                label: Some("laptop".into()),
-                capabilities: 3,
-                epoch: 1,
-                created_at_ms: 1_700_000_001_000,
-                ed25519_pub: "ee".repeat(32),
-                mldsa65_pub: "dd".repeat(1952),
-            }],
-        };
-        write_devices(dir.path(), &devs).unwrap();
-        let loaded = read_devices(dir.path()).unwrap();
-        assert_eq!(loaded, devs);
+        let key = NeuralKey::generate().unwrap();
+
+        let store = MachineKeyStore::new();
+        let entry_a = store.generate_machine_key(&key, "laptop").unwrap();
+        let entry_b = store.generate_machine_key(&key, "phone").unwrap();
+
+        write_sealed_devices(dir.path(), &key, &store).unwrap();
+        let loaded = read_sealed_devices(dir.path(), &key)
+            .unwrap()
+            .expect("sealed store must be present after write");
+
+        let entries = loaded.list_machine_keys(&key).unwrap();
+        assert_eq!(entries.len(), 2);
+        let ids: std::collections::HashSet<_> =
+            entries.iter().map(|e| e.machine_id).collect();
+        assert!(ids.contains(&entry_a.machine_id));
+        assert!(ids.contains(&entry_b.machine_id));
+    }
+
+    #[test]
+    fn remove_sealed_devices_is_idempotent() {
+        let dir = tempdir().unwrap();
+        remove_sealed_devices(dir.path()).expect("remove on empty dir must succeed");
+        let key = NeuralKey::generate().unwrap();
+        let store = MachineKeyStore::new();
+        store.generate_machine_key(&key, "x").unwrap();
+        write_sealed_devices(dir.path(), &key, &store).unwrap();
+        assert!(sealed_devices_path(dir.path()).exists());
+        remove_sealed_devices(dir.path()).expect("remove existing file must succeed");
+        assert!(!sealed_devices_path(dir.path()).exists());
     }
 }

@@ -4,10 +4,16 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
-use zos_grid::{GridFacadeError, GridStatusDto, SetMultiaddrRequest};
+use zos_grid::{GridFacadeError, GridStatusDto, SetMultiaddrRequest, SetTimeoutRequest};
 
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
+
+/// Inclusive bounds on the user-facing connect-timeout (in milliseconds).
+/// Mirrors the validation the React Settings UI runs so a hand-crafted
+/// request can't bypass the policy.
+const MIN_TIMEOUT_MS: u64 = 1_000;
+const MAX_TIMEOUT_MS: u64 = 300_000;
 
 /// Map a façade error to the standard ApiError envelope.
 fn map_err(e: GridFacadeError) -> (StatusCode, Json<ApiError>) {
@@ -42,6 +48,42 @@ pub(crate) async fn set_config(
     state
         .grid
         .set_multiaddr(req.multiaddr)
+        .await
+        .map_err(map_err)?;
+    let s = state.grid.status().await.map_err(map_err)?;
+    Ok(Json(s))
+}
+
+/// `POST /api/grid/timeout`
+///
+/// Sibling of `set_config` for the connect-timeout knob. Kept as its own
+/// endpoint (rather than folded into `SetMultiaddrRequest`) because:
+///
+/// * it does *not* drop any live connection, whereas `set_config` does,
+///   which makes "set both fields atomically" a confusing UX promise;
+/// * the natural shape `Option<u64>` already round-trips JSON `null` /
+///   number / absent unambiguously when it is the *only* field in the
+///   body, with no need for `Option<Option<_>>` plumbing.
+pub(crate) async fn set_timeout(
+    State(state): State<AppState>,
+    Json(req): Json<SetTimeoutRequest>,
+) -> ApiResult<Json<GridStatusDto>> {
+    if let Some(ms) = req.timeout_ms {
+        if !(MIN_TIMEOUT_MS..=MAX_TIMEOUT_MS).contains(&ms) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ApiError {
+                    error: format!(
+                        "timeout_ms must be between {MIN_TIMEOUT_MS} and {MAX_TIMEOUT_MS}"
+                    ),
+                    code: Some("invalid_range".into()),
+                }),
+            ));
+        }
+    }
+    state
+        .grid
+        .set_connect_timeout(req.timeout_ms)
         .await
         .map_err(map_err)?;
     let s = state.grid.status().await.map_err(map_err)?;
@@ -136,5 +178,43 @@ mod tests {
         let Json(s2) = disconnect(State(state)).await.unwrap();
         assert!(!s1.connected);
         assert!(!s2.connected);
+    }
+
+    #[tokio::test]
+    async fn set_timeout_persists_value_and_surfaces_in_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = make_state(dir.path().to_path_buf());
+        let req = SetTimeoutRequest {
+            timeout_ms: Some(45_000),
+        };
+        let Json(s) = set_timeout(State(state.clone()), Json(req)).await.unwrap();
+        assert_eq!(s.connect_timeout_ms, Some(45_000));
+
+        // Clear back to default with explicit null.
+        let req = SetTimeoutRequest { timeout_ms: None };
+        let Json(s) = set_timeout(State(state), Json(req)).await.unwrap();
+        assert_eq!(s.connect_timeout_ms, None);
+    }
+
+    #[tokio::test]
+    async fn set_timeout_rejects_below_minimum() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = make_state(dir.path().to_path_buf());
+        let req = SetTimeoutRequest { timeout_ms: Some(500) };
+        let err = set_timeout(State(state), Json(req)).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.1.code.as_deref(), Some("invalid_range"));
+    }
+
+    #[tokio::test]
+    async fn set_timeout_rejects_above_maximum() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = make_state(dir.path().to_path_buf());
+        let req = SetTimeoutRequest {
+            timeout_ms: Some(300_001),
+        };
+        let err = set_timeout(State(state), Json(req)).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.1.code.as_deref(), Some("invalid_range"));
     }
 }

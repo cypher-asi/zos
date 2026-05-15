@@ -10,7 +10,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::handlers::{auth, devices, grid, identity, projects};
+use crate::handlers::{auth, chat, devices, grid, identity, projects};
 use crate::state::AppState;
 
 const LOCAL_CORS_HOSTS: &[&str] = &["localhost", "127.0.0.1"];
@@ -68,6 +68,7 @@ fn grid_routes() -> Router<AppState> {
     Router::new()
         .route("/api/grid/status", get(grid::status))
         .route("/api/grid/config", post(grid::set_config))
+        .route("/api/grid/timeout", post(grid::set_timeout))
         .route("/api/grid/connect", post(grid::connect))
         .route("/api/grid/disconnect", post(grid::disconnect))
         .route(
@@ -78,6 +79,23 @@ fn grid_routes() -> Router<AppState> {
             "/api/devices",
             get(devices::list_devices).post(devices::create_device),
         )
+}
+
+fn chat_routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/api/chat/conversations",
+            get(chat::list_conversations).post(chat::create_conversation),
+        )
+        .route(
+            "/api/chat/conversations/{id}/messages",
+            get(chat::list_messages).post(chat::send_message),
+        )
+        .route(
+            "/api/chat/contacts",
+            get(chat::list_contacts).post(chat::add_contact),
+        )
+        .route("/api/chat/stream", get(chat::chat_stream))
 }
 
 pub fn create_router(state: AppState, interface_dir: Option<PathBuf>) -> Router {
@@ -91,6 +109,7 @@ pub fn create_router(state: AppState, interface_dir: Option<PathBuf>) -> Router 
         .merge(protected_auth_routes())
         .merge(project_routes())
         .merge(grid_routes())
+        .merge(chat_routes())
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth_guard::require_verified_session,

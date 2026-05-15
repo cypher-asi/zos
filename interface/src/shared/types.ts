@@ -35,6 +35,11 @@ export interface ApiError {
 export interface GridStatus {
   connected: boolean;
   multiaddr: string;
+  /**
+   * Custom connect-timeout in milliseconds, or `null` when the SDK
+   * default (currently 30 000 ms) is in effect.
+   */
+  connect_timeout_ms: number | null;
   identity_id: string | null;
   last_error: string | null;
 }
@@ -64,3 +69,51 @@ export const Capability = {
 } as const;
 
 export type Capability = (typeof Capability)[keyof typeof Capability];
+
+// Chat DTOs (mirror `crates/zos-grid/src/dto.rs`). All `*_id`/hex fields are
+// ASCII hex; ConversationId is 64 chars (32 bytes), MessageId is 32 chars
+// (16 bytes), IdentityId / MachineId are 32 chars (16 bytes).
+
+export interface ConversationDto {
+  id: string;
+  kind: string;
+  contact_id: string | null;
+  name: string | null;
+  last_message_at: number | null;
+  last_message_preview: string | null;
+  unread_count: number;
+}
+
+export interface MessageDto {
+  id: string;
+  conversation_id: string;
+  sender_machine_id: string;
+  sender_identity_id: string;
+  body: string;
+  sent_at: number;
+  status: string;
+}
+
+export interface ContactMachineKeyDto {
+  machine_id: string;
+  ed25519_pub_hex: string;
+  mldsa65_pub_hex: string;
+}
+
+export interface ContactDto {
+  id: string;
+  label: string;
+  identity_id: string;
+  machine_keys: ContactMachineKeyDto[];
+  added_at: number;
+}
+
+/**
+ * Discriminated union mirroring `MessageEnvelopeDto` on the server. We use a
+ * narrow `event` tag so future variants (e.g. `conversation_updated`) can be
+ * added without breaking existing handlers.
+ */
+export type ChatEnvelope = {
+  event: "message";
+  message: MessageDto;
+};

@@ -8,7 +8,7 @@ import {
 } from "react";
 import { ArrowUp, Plus } from "lucide-react";
 import { Textarea } from "@cypher-asi/zui";
-import { useChatStore } from "../stores/chat-store";
+import { useSendMessageMutation } from "../stores/chat-data";
 import styles from "./ChatInputBar.module.css";
 
 interface ChatInputBarProps {
@@ -22,7 +22,7 @@ interface ChatInputBarProps {
  */
 export function ChatInputBar({ conversationId }: ChatInputBarProps) {
   const [draft, setDraft] = useState("");
-  const sendMessage = useChatStore((s) => s.sendMessage);
+  const sendMutation = useSendMessageMutation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -33,10 +33,10 @@ export function ChatInputBar({ conversationId }: ChatInputBarProps) {
   const handleSend = useCallback(() => {
     const trimmed = draft.trim();
     if (!trimmed) return;
-    sendMessage(conversationId, trimmed);
+    sendMutation.mutate({ conversationId, body: trimmed });
     setDraft("");
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [conversationId, draft, sendMessage]);
+  }, [conversationId, draft, sendMutation]);
 
   const handleChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
     setDraft(event.target.value);

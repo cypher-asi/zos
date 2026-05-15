@@ -25,12 +25,19 @@ pub const DEFAULT_GRID_MULTIADDR: &str =
 pub struct PersistedConfig {
     /// Multiaddr of the GRID relay to dial on connect.
     pub grid_multiaddr: String,
+    /// Optional override for the libp2p connect-timeout, in milliseconds.
+    /// `None` means "use the SDK default" (currently 30s) — written into
+    /// `config.json` only after the user picks a custom value, so older
+    /// installs without this key continue to deserialize cleanly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connect_timeout_ms: Option<u64>,
 }
 
 impl Default for PersistedConfig {
     fn default() -> Self {
         Self {
             grid_multiaddr: DEFAULT_GRID_MULTIADDR.to_owned(),
+            connect_timeout_ms: None,
         }
     }
 }
@@ -94,10 +101,34 @@ mod tests {
         let dir = tempdir().unwrap();
         let cfg = PersistedConfig {
             grid_multiaddr: "/ip4/10.0.0.5/udp/4242/quic-v1".into(),
+            connect_timeout_ms: Some(45_000),
         };
         cfg.save(dir.path()).unwrap();
         let loaded = PersistedConfig::load_or_init(dir.path()).unwrap();
         assert_eq!(loaded, cfg);
+    }
+
+    #[test]
+    fn legacy_config_without_timeout_field_parses_with_none() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            PersistedConfig::path(dir.path()),
+            br#"{"grid_multiaddr":"/ip4/10.0.0.5/udp/4242/quic-v1"}"#,
+        )
+        .unwrap();
+        let loaded = PersistedConfig::load_or_init(dir.path()).unwrap();
+        assert_eq!(loaded.grid_multiaddr, "/ip4/10.0.0.5/udp/4242/quic-v1");
+        assert_eq!(loaded.connect_timeout_ms, None);
+    }
+
+    #[test]
+    fn default_omits_timeout_field_in_serialized_form() {
+        let cfg = PersistedConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(
+            !json.contains("connect_timeout_ms"),
+            "default should not write the field: {json}"
+        );
     }
 
     #[test]

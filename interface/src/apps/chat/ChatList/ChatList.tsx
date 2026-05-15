@@ -1,12 +1,18 @@
 import { useCallback, useMemo } from "react";
 import { useAppUIStore } from "../../../stores/app-ui-store";
 import { useNavigate } from "../../../lib/router-adapter";
+import { useChatStream } from "../../../shared/api/chatStream";
 import { ChatConversationRow } from "../ChatConversationRow";
 import { useSortedConversations } from "../stores/chat-store";
 import { useConversationIdFromUrl } from "../useConversationParam";
 import styles from "./ChatList.module.css";
 
 export function ChatList() {
+  // ChatList stays mounted for the full lifetime of the chat app, so
+  // it is the natural owner of the long-lived WS that fans inbound
+  // `MessageEnvelopeDto` frames into the react-query cache.
+  useChatStream();
+
   const conversations = useSortedConversations();
   const selectedId = useConversationIdFromUrl();
   const navigate = useNavigate();

@@ -57,6 +57,11 @@
   min-width: 0;
 }
 
+.timeoutInput {
+  width: 6rem;
+  flex: 0 0 auto;
+}
+
 .buttonRow {
   display: flex;
   gap: var(--space-2);

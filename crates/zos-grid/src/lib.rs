@@ -18,6 +18,7 @@
 
 #![forbid(unsafe_code)]
 
+mod chat;
 pub mod config;
 pub mod dto;
 mod error;
@@ -25,7 +26,12 @@ pub mod persist;
 mod runtime;
 
 pub use config::{PersistedConfig, DEFAULT_GRID_MULTIADDR};
-pub use dto::{CreateDeviceRequest, DeviceDto, GridStatusDto, IdentityDto, SetMultiaddrRequest};
+pub use dto::{
+    AddContactRequest, ContactDto, ContactMachineKeyDto, ConversationDto,
+    CreateConversationRequest, CreateDeviceRequest, DeviceDto, GridStatusDto, IdentityDto,
+    ListConversationsQuery, ListMessagesQuery, MessageDto, MessageEnvelopeDto, SendMessageRequest,
+    SetMultiaddrRequest, SetTimeoutRequest,
+};
 pub use error::GridFacadeError;
 pub use persist::{PersistedDevice, PersistedDevices, PersistedIdentity};
 pub use runtime::ZeroRuntime;

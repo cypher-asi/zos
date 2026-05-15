@@ -2,6 +2,9 @@
 
 use thiserror::Error;
 
+use zero_messaging::contacts::types::ContactError;
+use zero_sdk::{DmError, InboxError};
+
 /// Errors surfaced by [`crate::ZeroRuntime`] and the persisted-config layer.
 #[derive(Debug, Error)]
 pub enum GridFacadeError {
@@ -30,4 +33,52 @@ pub enum GridFacadeError {
     /// message is the SDK's own `Display` output.
     #[error("bootstrap failed: {0}")]
     Bootstrap(String),
+
+    /// Caller passed a hex-encoded id that did not decode to the expected
+    /// length (e.g. a 16-byte `IdentityId` or 32-byte `ConversationId`).
+    #[error("invalid hex id: {0}")]
+    BadHex(String),
+
+    /// Caller-addressable resource (conversation / contact / message) does
+    /// not exist.
+    #[error("not found: {0}")]
+    NotFound(String),
+
+    /// Error originating from the upstream DM service.
+    #[error("dm error: {0}")]
+    Dm(String),
+
+    /// Error originating from the upstream inbox service.
+    #[error("inbox error: {0}")]
+    Inbox(String),
+
+    /// Error originating from the upstream contact store.
+    #[error("contact error: {0}")]
+    Contact(String),
+}
+
+impl From<DmError> for GridFacadeError {
+    fn from(e: DmError) -> Self {
+        match e {
+            DmError::ContactNotFound(_)
+            | DmError::UnknownConversation(_)
+            | DmError::MessageNotFound(_) => GridFacadeError::NotFound(e.to_string()),
+            other => GridFacadeError::Dm(other.to_string()),
+        }
+    }
+}
+
+impl From<InboxError> for GridFacadeError {
+    fn from(e: InboxError) -> Self {
+        GridFacadeError::Inbox(e.to_string())
+    }
+}
+
+impl From<ContactError> for GridFacadeError {
+    fn from(e: ContactError) -> Self {
+        match e {
+            ContactError::NotFound(_) => GridFacadeError::NotFound(e.to_string()),
+            other => GridFacadeError::Contact(other.to_string()),
+        }
+    }
 }

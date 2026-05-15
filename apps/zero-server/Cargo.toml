@@ -6,7 +6,8 @@ edition = "2021"
 [dependencies]
 zos-auth = { path = "../../crates/zos-auth" }
 zos-grid = { path = "../../crates/zos-grid" }
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
+futures-util = "0.3"
 dashmap = "6"
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"

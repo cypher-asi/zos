@@ -1,6 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocation } from "../../lib/router-adapter";
-import { useChatStore } from "./stores/chat-store";
 
 const CHAT_PATH_PATTERN = /^\/chat\/([^/]+)/;
 
@@ -12,13 +11,12 @@ export function useConversationIdFromUrl(): string | null {
   }, [pathname]);
 }
 
+/**
+ * Single source of truth for "which conversation is the chat app
+ * showing right now". The URL is authoritative -- the previous
+ * zustand-backed `selectConversation` mirror is intentionally gone now
+ * that all conversation data flows through react-query.
+ */
 export function useConversationParam(): string | null {
-  const urlId = useConversationIdFromUrl();
-  const selectConversation = useChatStore((s) => s.selectConversation);
-
-  useEffect(() => {
-    selectConversation(urlId);
-  }, [urlId, selectConversation]);
-
-  return urlId;
+  return useConversationIdFromUrl();
 }
