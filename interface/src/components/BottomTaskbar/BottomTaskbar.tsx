@@ -17,6 +17,7 @@ import { useAuth } from "../../stores/auth-store";
 import { getTaskbarAppsCollapsed, setTaskbarAppsCollapsed } from "../../utils/storage";
 import { useNavigate } from "../../lib/router-adapter";
 import { AppNavRail, TaskbarIconButton, TASKBAR_ICON_SIZE } from "../AppNavRail";
+import { GridStatusPill } from "./GridStatusPill";
 import styles from "./BottomTaskbar.module.css";
 
 const TASKBAR_CHEVRON_SIZE = TASKBAR_ICON_SIZE + 1;
@@ -180,6 +181,7 @@ export function BottomTaskbar() {
       </div>
 
       <div className={styles.right}>
+        <GridStatusPill />
         <ThemeToggleButton />
         <UserMenuButton />
         <TaskbarIconButton
