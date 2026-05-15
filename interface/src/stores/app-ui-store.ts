@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { ReactNode } from "react";
 import { getPreviousPath, setPreviousPath } from "../utils/storage";
+import type { SettingsSectionId } from "../components/Settings";
 
 type AppUIState = {
   visitedAppIds: Set<string>;
@@ -10,6 +11,7 @@ type AppUIState = {
   appsModalOpen: boolean;
   backgroundModalOpen: boolean;
   settingsModalOpen: boolean;
+  settingsActiveSection: SettingsSectionId;
   previousPath: string | null;
 
   markAppVisited: (appId: string) => void;
@@ -22,6 +24,7 @@ type AppUIState = {
   closeBackgroundModal: () => void;
   openSettingsModal: () => void;
   closeSettingsModal: () => void;
+  setSettingsActiveSection: (id: SettingsSectionId) => void;
   setPreviousPath: (path: string) => void;
 };
 
@@ -33,6 +36,7 @@ export const useAppUIStore = create<AppUIState>()((set) => ({
   appsModalOpen: false,
   backgroundModalOpen: false,
   settingsModalOpen: false,
+  settingsActiveSection: "appearance",
   previousPath: typeof window === "undefined" ? null : getPreviousPath(),
 
   markAppVisited: (appId): void => {
@@ -63,6 +67,7 @@ export const useAppUIStore = create<AppUIState>()((set) => ({
   closeBackgroundModal: (): void => set({ backgroundModalOpen: false }),
   openSettingsModal: (): void => set({ settingsModalOpen: true }),
   closeSettingsModal: (): void => set({ settingsModalOpen: false }),
+  setSettingsActiveSection: (id): void => set({ settingsActiveSection: id }),
 
   setPreviousPath: (path): void => {
     if (!path) return;
