@@ -1,0 +1,64 @@
+﻿add @tybys/wasm-util 0.10.2
+add @emnapi/wasi-threads 1.2.1
+add @napi-rs/wasm-runtime 1.1.4
+add @emnapi/runtime 1.10.0
+add @emnapi/core 1.10.0
+add @rolldown/binding-win32-arm64-msvc 1.0.1
+add @rolldown/binding-wasm32-wasi 1.0.1
+add @rolldown/binding-openharmony-arm64 1.0.1
+add @rolldown/binding-linux-x64-musl 1.0.1
+add @rolldown/binding-linux-x64-gnu 1.0.1
+add @rolldown/binding-linux-s390x-gnu 1.0.1
+add @rolldown/binding-linux-ppc64-gnu 1.0.1
+add @rolldown/binding-linux-arm64-musl 1.0.1
+add @rolldown/binding-linux-arm64-gnu 1.0.1
+add @rolldown/binding-linux-arm-gnueabihf 1.0.1
+add @rolldown/binding-freebsd-x64 1.0.1
+add @rolldown/binding-darwin-x64 1.0.1
+add @rolldown/binding-darwin-arm64 1.0.1
+add @rolldown/binding-android-arm64 1.0.1
+add lightningcss-win32-arm64-msvc 1.32.0
+add lightningcss-linux-x64-musl 1.32.0
+add lightningcss-linux-x64-gnu 1.32.0
+add lightningcss-linux-arm64-musl 1.32.0
+add lightningcss-linux-arm64-gnu 1.32.0
+add lightningcss-linux-arm-gnueabihf 1.32.0
+add lightningcss-freebsd-x64 1.32.0
+add lightningcss-darwin-x64 1.32.0
+add lightningcss-darwin-arm64 1.32.0
+add lightningcss-android-arm64 1.32.0
+add fsevents 2.3.3
+change @oxc-project/types 0.122.0 => 0.130.0
+change @rolldown/binding-win32-x64-msvc 1.0.0-rc.12 => 1.0.1
+change vite 8.0.3 => 8.0.13
+change tinyglobby 0.2.15 => 0.2.16
+change rolldown 1.0.0-rc.12 => 1.0.1
+change @rolldown/pluginutils 1.0.0-rc.12 => 1.0.1
+change postcss 8.5.8 => 8.5.14
+change nanoid 3.3.11 => 3.3.12
+
+added 30 packages, changed 8 packages, and audited 227 packages in 3s
+
+68 packages are looking for funding
+  run `npm fund` for details
+
+# npm audit report
+
+postcss  <8.5.10
+Severity: moderate
+PostCSS has XSS via Unescaped </style> in its CSS Stringify Output - https://github.com/advisories/GHSA-qx2v-qp2m-jg93
+fix available via `npm audit fix`
+
+
+vite  8.0.0 - 8.0.4
+Severity: high
+Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling - https://github.com/advisories/GHSA-4w7w-66w2-5vf9
+Vite: `server.fs.deny` bypassed with queries - https://github.com/advisories/GHSA-v2wj-q39q-566r
+Vite Vulnerable to Arbitrary File Read via Vite Dev Server WebSocket - https://github.com/advisories/GHSA-p9ff-h696-f583
+fix available via `npm audit fix`
+
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues, run:
+  npm audit fix
