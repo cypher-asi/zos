@@ -1,19 +1,22 @@
 //! Wire-format DTOs shared between the façade and the HTTP handlers.
 //!
-//! `MachineKeyRecord` and `IdentityRecord` themselves contain `serde_bytes`
-//! byte fields that don't round-trip cleanly through JSON. The DTOs in this
-//! module flatten them to a friendly `{ machine_id, identity_id, ... }` shape
-//! suited to the React client.
+//! The previous SDK returned `IdentityRecord` / `MachineKeyRecord` types
+//! whose `serde_bytes` fields didn't round-trip cleanly through JSON. The
+//! new SDK doesn't expose comparable types at all, so the DTOs here are
+//! simply a flat projection of the `crate::persist` records onto the
+//! shape the React client already consumes.
 
 use serde::{Deserialize, Serialize};
-use zero_sdk::identity::{IdentityRecord, MachineKeyRecord};
+
+use crate::persist::{PersistedDevice, PersistedIdentity};
 
 /// `GET /api/grid/status`.
 #[derive(Debug, Clone, Serialize)]
 pub struct GridStatusDto {
-    /// `true` when the runtime currently holds an `Arc<Zero>`. The SDK does
-    /// not expose a transport-level liveness check, so this only reflects
-    /// whether bootstrap has succeeded since the last (re)connect.
+    /// `true` when the runtime currently holds a live `ZeroSdk` and a
+    /// dialled `RealGridClient`. The real upstream GRID library is still
+    /// stubbed in `zero-sdk-10`, so this only reflects whether the local
+    /// RocksDB opened and `RealGridClient::connect` returned `Ok`.
     pub connected: bool,
     /// Multiaddr that will be dialed on the next connect attempt.
     pub multiaddr: String,
@@ -35,12 +38,12 @@ pub struct IdentityDto {
     pub created_at: u64,
 }
 
-impl From<&IdentityRecord> for IdentityDto {
-    fn from(r: &IdentityRecord) -> Self {
+impl From<&PersistedIdentity> for IdentityDto {
+    fn from(r: &PersistedIdentity) -> Self {
         Self {
-            identity_id: r.id.to_string(),
-            epoch: r.epoch.as_u64(),
-            created_at: u64::try_from(r.created_at.as_i64().max(0)).unwrap_or(0),
+            identity_id: r.identity_id.clone(),
+            epoch: r.epoch,
+            created_at: r.created_at_ms,
         }
     }
 }
@@ -54,20 +57,20 @@ pub struct DeviceDto {
     pub identity_id: String,
     /// Epoch at which this machine key was registered.
     pub epoch: u64,
-    /// Capability bitflags (see `zero_identity::MachineKeyCapabilities`).
+    /// Capability bitflags (see `zid::keys::machine::MachineKeyCapabilities`).
     pub capabilities: u32,
     /// Unix milliseconds at which the machine key was created.
     pub created_at: u64,
 }
 
-impl From<&MachineKeyRecord> for DeviceDto {
-    fn from(m: &MachineKeyRecord) -> Self {
+impl From<&PersistedDevice> for DeviceDto {
+    fn from(m: &PersistedDevice) -> Self {
         Self {
-            machine_id: m.machine_id.to_string(),
-            identity_id: m.identity_id.to_string(),
-            epoch: m.epoch.as_u64(),
-            capabilities: m.capabilities.bits(),
-            created_at: u64::try_from(m.created_at.as_i64().max(0)).unwrap_or(0),
+            machine_id: m.machine_id.clone(),
+            identity_id: m.identity_id.clone(),
+            epoch: m.epoch,
+            capabilities: m.capabilities,
+            created_at: m.created_at_ms,
         }
     }
 }
@@ -82,8 +85,7 @@ pub struct SetMultiaddrRequest {
 /// Body of `POST /api/devices`.
 #[derive(Debug, Deserialize)]
 pub struct CreateDeviceRequest {
-    /// Optional human-friendly label. Currently unused on disk; reserved so
-    /// the UI can start sending it without a follow-up server change.
+    /// Optional human-friendly label persisted alongside the machine key.
     #[serde(default)]
     pub label: Option<String>,
     /// Capability bitflags (`SEND_MESSAGES | RECEIVE_MESSAGES = 3`).
@@ -120,5 +122,40 @@ mod tests {
         assert_eq!(v["connected"], false);
         assert!(v["identity_id"].is_null());
         assert!(v["last_error"].is_null());
+    }
+
+    #[test]
+    fn identity_dto_from_persisted() {
+        let p = PersistedIdentity {
+            identity_id: "ab".repeat(16),
+            epoch: 5,
+            created_at_ms: 1_700_000_000_000,
+            shares: vec![],
+            threshold: 2,
+        };
+        let dto = IdentityDto::from(&p);
+        assert_eq!(dto.identity_id, p.identity_id);
+        assert_eq!(dto.epoch, 5);
+        assert_eq!(dto.created_at, 1_700_000_000_000);
+    }
+
+    #[test]
+    fn device_dto_from_persisted() {
+        let d = PersistedDevice {
+            machine_id: "11".repeat(16),
+            identity_id: "22".repeat(16),
+            label: None,
+            capabilities: 3,
+            epoch: 2,
+            created_at_ms: 1_700_000_001_000,
+            ed25519_pub: "ee".repeat(32),
+            mldsa65_pub: "dd".repeat(1952),
+        };
+        let dto = DeviceDto::from(&d);
+        assert_eq!(dto.machine_id, d.machine_id);
+        assert_eq!(dto.identity_id, d.identity_id);
+        assert_eq!(dto.capabilities, 3);
+        assert_eq!(dto.epoch, 2);
+        assert_eq!(dto.created_at, 1_700_000_001_000);
     }
 }

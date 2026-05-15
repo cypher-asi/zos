@@ -1,47 +1,62 @@
-//! `ZeroRuntime` — the lazy `Arc<Zero>` holder + identity / device façade.
+//! `ZeroRuntime` — façade over the new `zero-sdk-10` stack.
 //!
-//! The runtime is intentionally cheap to construct (`new`) so the HTTP
-//! server can boot even when the GRID multiaddr points at nothing. The
-//! actual `Zero::bootstrap` call happens on the first `ensure_started` /
-//! `connect`, and any failure is captured in `last_error` so the UI can
-//! surface it via `GET /api/grid/status`.
+//! Compared to the older `zero-sdk` integration this layer kept around
+//! before, two shifts are notable:
+//!
+//! * `zero-sdk-10` does **not** persist `NeuralKey` material, machine
+//!   keys, or "current identity" markers itself. We carry that on local
+//!   JSON files (`crate::persist`), reusing `<data_dir>/identity/` so the
+//!   on-disk shape is migration-friendly.
+//! * `zero_sdk::ZeroSdk::open` opens a RocksDB at `<data_dir>/db` and
+//!   needs an in-hand `NeuralKey` to bind it to a stable identity. The
+//!   runtime stays "cold" until `ensure_started`, at which point we
+//!   recover the key from the persisted Shamir shares.
+//!
+//! `connected` reflects whether we currently hold a live `ZeroSdk` plus
+//! a successfully-dialled `RealGridClient`. The real upstream GRID library
+//! is still a stub in `zero-sdk-10`, so for now this is "did the local DB
+//! open and did `RealGridClient::connect` return Ok" — exactly the level
+//! of liveness the React UI was already coded against.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::{Mutex, RwLock};
 
-use zero_sdk::crypto::NeuralKey;
-use zero_sdk::identity::{
-    FsIdentityStore, Identity, IdentityRecord, IdentityStore as _, MachineKeyCapabilities,
-    MachineKeyRecord,
-};
-use zero_sdk::types::IdentityId;
-use zero_sdk::{Zero, ZeroConfig};
+use zero_identity::neural_key::NeuralKey;
+use zero_sdk::{RealGridClient, ZeroSdk};
 
 use crate::config::PersistedConfig;
 use crate::dto::GridStatusDto;
 use crate::error::GridFacadeError;
+use crate::persist::{self, PersistedDevice, PersistedDevices, PersistedIdentity};
 
-/// File at the root of the identity directory holding the active identity
-/// id as raw 16 bytes. Mirrors `zero_sdk::runtime::CURRENT_ID_FILE`.
-const CURRENT_ID_FILE: &str = "current_id";
+/// Subdirectory under `data_dir` where the SDK opens its RocksDB.
+const SDK_DB_SUBDIR: &str = "db";
 
-/// Lazy holder for an `Arc<Zero>` runtime sharing the on-disk state in
+/// Live SDK + GRID client owned together so they're swapped atomically on
+/// disconnect / reconnect.
+struct LiveSdk {
+    sdk: Arc<ZeroSdk>,
+    grid: Arc<RealGridClient>,
+}
+
+/// Lazy holder for the new `ZeroSdk` runtime, sharing on-disk state in
 /// `data_dir` with any other process pointed at the same directory
 /// (typically the embedded server inside `zero-desktop`).
 pub struct ZeroRuntime {
     data_dir: PathBuf,
-    inner: RwLock<Option<Arc<Zero>>>,
+    inner: RwLock<Option<LiveSdk>>,
     last_error: Mutex<Option<String>>,
     connected: AtomicBool,
 }
 
 impl ZeroRuntime {
     /// Set up on-disk layout (`data_dir`, `config.json`) but do **not**
-    /// dial GRID. Use [`Self::ensure_started`] / [`Self::connect`] to
-    /// actually bootstrap a `Zero`.
+    /// open the SDK or dial GRID. Use [`Self::ensure_started`] /
+    /// [`Self::connect`] to actually bring the runtime up.
     pub fn new(data_dir: PathBuf) -> Result<Arc<Self>, GridFacadeError> {
         std::fs::create_dir_all(&data_dir)?;
         // ensure config.json exists so future reads always succeed
@@ -64,53 +79,78 @@ impl ZeroRuntime {
         PersistedConfig::load_or_init(&self.data_dir)
     }
 
-    /// Build the `Arc<Zero>` if it isn't already up. Idempotent: a second
-    /// concurrent call will block on the write-lock and observe the
-    /// already-built handle.
-    pub async fn ensure_started(&self) -> Result<Arc<Zero>, GridFacadeError> {
-        if let Some(zero) = self.inner.read().await.as_ref() {
-            return Ok(Arc::clone(zero));
+    /// Open the `ZeroSdk` + dial GRID if it isn't already up. Idempotent:
+    /// a second concurrent call will block on the write-lock and observe
+    /// the already-built handle.
+    ///
+    /// Returns [`GridFacadeError::IdentityMissing`] if no identity has
+    /// been created yet — the SDK can't bind to a database without a
+    /// `NeuralKey`.
+    pub async fn ensure_started(&self) -> Result<Arc<ZeroSdk>, GridFacadeError> {
+        if let Some(live) = self.inner.read().await.as_ref() {
+            return Ok(Arc::clone(&live.sdk));
         }
         let mut guard = self.inner.write().await;
-        if let Some(zero) = guard.as_ref() {
-            return Ok(Arc::clone(zero));
+        if let Some(live) = guard.as_ref() {
+            return Ok(Arc::clone(&live.sdk));
         }
 
-        let cfg = PersistedConfig::load_or_init(&self.data_dir)?;
-        let zero_cfg = ZeroConfig {
-            data_dir: self.data_dir.clone(),
-            grid_multiaddr: cfg.grid_multiaddr,
-        };
+        let identity =
+            persist::read_identity(&self.data_dir)?.ok_or(GridFacadeError::IdentityMissing)?;
+        let neural_key = persist::recover(&identity)?;
 
-        match Zero::bootstrap(zero_cfg).await {
-            Ok(z) => {
-                let arc = Arc::new(z);
-                *guard = Some(Arc::clone(&arc));
+        let cfg = PersistedConfig::load_or_init(&self.data_dir)?;
+        let db_path = self.data_dir.join(SDK_DB_SUBDIR);
+
+        match Self::bring_up(db_path, &neural_key, &cfg.grid_multiaddr).await {
+            Ok(live) => {
+                let sdk = Arc::clone(&live.sdk);
+                *guard = Some(live);
                 self.connected.store(true, Ordering::SeqCst);
                 *self.last_error.lock().await = None;
-                tracing::info!("zos-grid: Zero bootstrap succeeded");
-                Ok(arc)
+                tracing::info!("zos-grid: ZeroSdk bootstrap succeeded");
+                Ok(sdk)
             }
             Err(e) => {
                 self.connected.store(false, Ordering::SeqCst);
                 let msg = e.to_string();
-                tracing::warn!(error = %msg, "zos-grid: Zero bootstrap failed");
+                tracing::warn!(error = %msg, "zos-grid: ZeroSdk bootstrap failed");
                 *self.last_error.lock().await = Some(msg.clone());
                 Err(GridFacadeError::Bootstrap(msg))
             }
         }
     }
 
-    /// Drop the active `Arc<Zero>` (if any). Subsequent
-    /// [`Self::ensure_started`] calls will rebuild it from `config.json`.
+    /// Open the local DB and dial the GRID multiaddr, packaging both
+    /// into a [`LiveSdk`] for the runtime to hold onto. Errors produced
+    /// here are stringified into [`GridFacadeError::Bootstrap`] by the
+    /// caller.
+    async fn bring_up(
+        db_path: PathBuf,
+        neural_key: &NeuralKey,
+        multiaddr: &str,
+    ) -> Result<LiveSdk, String> {
+        let sdk = ZeroSdk::open(&db_path, neural_key).map_err(|e| e.to_string())?;
+        let grid = RealGridClient::connect(multiaddr)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(LiveSdk {
+            sdk: Arc::new(sdk),
+            grid: Arc::new(grid),
+        })
+    }
+
+    /// Drop the live SDK + GRID client (if any). Subsequent
+    /// [`Self::ensure_started`] calls will rebuild them from the
+    /// persisted state.
     pub async fn disconnect(&self) {
         let mut guard = self.inner.write().await;
         *guard = None;
         self.connected.store(false, Ordering::SeqCst);
     }
 
-    /// Persist a new GRID multiaddr and tear down any active connection so
-    /// the next `connect` dials the new endpoint.
+    /// Persist a new GRID multiaddr and tear down any active connection
+    /// so the next `connect` dials the new endpoint.
     pub async fn set_multiaddr(&self, multiaddr: String) -> Result<(), GridFacadeError> {
         let cfg = PersistedConfig {
             grid_multiaddr: multiaddr,
@@ -125,7 +165,7 @@ impl ZeroRuntime {
     /// `GET /api/grid/status`. Never triggers bootstrap.
     pub async fn status(&self) -> Result<GridStatusDto, GridFacadeError> {
         let cfg = self.read_config()?;
-        let identity_id = self.current_identity_id()?.map(|id| id.to_string());
+        let identity_id = persist::read_identity(&self.data_dir)?.map(|r| r.identity_id);
         Ok(GridStatusDto {
             connected: self.connected.load(Ordering::SeqCst),
             multiaddr: cfg.grid_multiaddr,
@@ -134,136 +174,108 @@ impl ZeroRuntime {
         })
     }
 
-    fn identity_dir(&self) -> PathBuf {
-        self.data_dir.join("identity")
-    }
-
-    fn open_store(&self) -> Result<FsIdentityStore, GridFacadeError> {
-        FsIdentityStore::open(self.identity_dir())
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))
-    }
-
-    fn current_id_path(&self) -> PathBuf {
-        self.identity_dir().join(CURRENT_ID_FILE)
-    }
-
-    /// Read the `current_id` marker file written by either us or
-    /// `zero_sdk::runtime::load_or_create_identity`.
-    pub fn current_identity_id(&self) -> Result<Option<IdentityId>, GridFacadeError> {
-        let path = self.current_id_path();
-        if !path.exists() {
-            return Ok(None);
-        }
-        let raw = std::fs::read(&path)?;
-        let id_bytes: [u8; 16] = raw
-            .as_slice()
-            .try_into()
-            .map_err(|_| GridFacadeError::Identity("corrupt identity id file".into()))?;
-        Ok(Some(IdentityId::new(id_bytes)))
-    }
-
-    /// Read the public [`IdentityRecord`] for the current identity, or
+    /// Read the public identity record for the current identity, or
     /// `None` if no identity has been created yet.
-    pub fn get_identity(&self) -> Result<Option<IdentityRecord>, GridFacadeError> {
-        let Some(id) = self.current_identity_id()? else {
-            return Ok(None);
-        };
-        let store = self.open_store()?;
-        store
-            .get_identity(&id)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))
+    pub fn get_identity(&self) -> Result<Option<PersistedIdentity>, GridFacadeError> {
+        persist::read_identity(&self.data_dir)
     }
 
-    /// Generate + persist a brand new Neural Key identity.
-    ///
-    /// We bypass `Zero::bootstrap` here so identity creation works even
-    /// when the GRID multiaddr is unreachable. This mirrors the
-    /// `load_or_create_identity` helper in
-    /// `zero_sdk::runtime`.
-    pub fn create_identity(&self) -> Result<IdentityRecord, GridFacadeError> {
-        if self.current_id_path().exists() {
+    /// Generate + persist a brand new Neural Key identity. Bypasses the
+    /// SDK so identity creation works even when GRID is unreachable.
+    pub fn create_identity(&self) -> Result<PersistedIdentity, GridFacadeError> {
+        if persist::read_identity(&self.data_dir)?.is_some() {
             return Err(GridFacadeError::IdentityExists);
         }
-        let store = self.open_store()?;
 
-        let mut bytes = [0u8; 32];
-        getrandom::getrandom(&mut bytes)
-            .map_err(|e| GridFacadeError::Identity(format!("getrandom failed: {e}")))?;
-        let identity = Identity::new(NeuralKey::new(bytes));
+        let key = NeuralKey::generate()
+            .map_err(|e| GridFacadeError::Identity(format!("neural key generate: {e}")))?;
+        let id_bytes = key.identity_id_bytes();
+        let (shares, threshold) = persist::split(&key)?;
 
-        let record = identity.to_record();
-        let secret = identity.to_secret_record();
-        store
-            .put_identity(&record)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?;
-        store
-            .put_identity_secret(&secret)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?;
-
-        write_current_id_atomic(&self.current_id_path(), identity.id().as_bytes())?;
+        let record = PersistedIdentity {
+            identity_id: hex::encode(id_bytes),
+            epoch: 0,
+            created_at_ms: now_unix_ms(),
+            shares,
+            threshold,
+        };
+        persist::write_identity(&self.data_dir, &record)?;
+        // Also reset the device list so a re-created identity doesn't
+        // inherit stale machine keys from a prior install.
+        persist::write_devices(&self.data_dir, &PersistedDevices::default())?;
         Ok(record)
     }
 
-    /// List all `MachineKeyRecord`s for the current identity.
-    pub fn list_devices(&self) -> Result<Vec<MachineKeyRecord>, GridFacadeError> {
-        let Some(id) = self.current_identity_id()? else {
+    /// List all persisted devices for the current identity.
+    pub fn list_devices(&self) -> Result<Vec<PersistedDevice>, GridFacadeError> {
+        if persist::read_identity(&self.data_dir)?.is_none() {
             return Ok(Vec::new());
-        };
-        let store = self.open_store()?;
-        store
-            .list_machines(&id)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))
+        }
+        Ok(persist::read_devices(&self.data_dir)?.devices)
     }
 
     /// Derive + persist a new machine key for the current identity.
-    pub fn register_machine(&self, capabilities: u32) -> Result<MachineKeyRecord, GridFacadeError> {
-        let Some(id) = self.current_identity_id()? else {
-            return Err(GridFacadeError::IdentityMissing);
+    ///
+    /// Bumps the identity's epoch and stores the public verifying-keys
+    /// alongside the caller-supplied `capabilities` bitflags so the
+    /// existing wire DTO is unchanged.
+    pub fn register_machine(&self, capabilities: u32) -> Result<PersistedDevice, GridFacadeError> {
+        self.register_machine_with_label(capabilities, None)
+    }
+
+    /// Variant of [`Self::register_machine`] that also persists a
+    /// human-friendly label.
+    pub fn register_machine_with_label(
+        &self,
+        capabilities: u32,
+        label: Option<String>,
+    ) -> Result<PersistedDevice, GridFacadeError> {
+        let mut identity =
+            persist::read_identity(&self.data_dir)?.ok_or(GridFacadeError::IdentityMissing)?;
+        let neural_key = persist::recover(&identity)?;
+
+        let store = zero_sdk::MachineKeyStore::new();
+        let label_for_store = label.clone().unwrap_or_default();
+        let entry = store
+            .generate_machine_key(&neural_key, label_for_store)
+            .map_err(|e| GridFacadeError::Identity(format!("machine key generate: {e}")))?;
+
+        identity.epoch = identity.epoch.saturating_add(1);
+        let device = PersistedDevice {
+            machine_id: hex::encode(entry.machine_id.as_bytes()),
+            identity_id: identity.identity_id.clone(),
+            label,
+            capabilities,
+            epoch: identity.epoch,
+            created_at_ms: entry.created_at.saturating_mul(1_000),
+            ed25519_pub: hex::encode(entry.ed25519_pub),
+            mldsa65_pub: hex::encode(&entry.mldsa65_pub),
         };
-        let store = self.open_store()?;
 
-        let record = store
-            .get_identity(&id)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?
-            .ok_or_else(|| GridFacadeError::Identity("identity record missing".into()))?;
-        let secret = store
-            .get_identity_secret(&id)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?
-            .ok_or_else(|| GridFacadeError::Identity("identity secret missing".into()))?;
-        let neural_bytes: [u8; 32] = secret
-            .neural_key_bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| GridFacadeError::Identity("corrupt neural key length".into()))?;
+        let mut devices = persist::read_devices(&self.data_dir)?;
+        devices.devices.push(device.clone());
+        persist::write_devices(&self.data_dir, &devices)?;
+        persist::write_identity(&self.data_dir, &identity)?;
 
-        let mut identity = Identity::load(&store, record, neural_bytes)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?;
+        Ok(device)
+    }
 
-        let caps = MachineKeyCapabilities::from_bits_truncate(capabilities);
-        let machine = identity
-            .register_machine(caps, &store)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?;
-
-        // Persist the updated identity record so `primary_machine` matches.
-        let updated = identity.to_record();
-        store
-            .put_identity(&updated)
-            .map_err(|e| GridFacadeError::Identity(e.to_string()))?;
-
-        Ok(machine)
+    /// Multiaddr of the currently-connected GRID client, if any. Mostly
+    /// useful in tests; HTTP handlers go through [`Self::status`].
+    pub async fn current_multiaddr(&self) -> Option<String> {
+        self.inner
+            .read()
+            .await
+            .as_ref()
+            .map(|live| live.grid.multiaddr().to_owned())
     }
 }
 
-/// Write the active identity id atomically to `path` (mirrors the helper
-/// in `zero_sdk::runtime`).
-fn write_current_id_atomic(path: &Path, id: &[u8; 16]) -> Result<(), GridFacadeError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, id)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -283,7 +295,7 @@ mod tests {
         assert!(!st.connected);
         assert!(st.identity_id.is_none());
         assert!(st.last_error.is_none());
-        assert_eq!(st.multiaddr, ZeroConfig::default().grid_multiaddr);
+        assert_eq!(st.multiaddr, PersistedConfig::default().grid_multiaddr);
     }
 
     #[test]
@@ -298,24 +310,53 @@ mod tests {
         let dir = tempdir().unwrap();
         let runtime = rt(dir.path());
         let first = runtime.create_identity().unwrap();
+        assert_eq!(first.identity_id.len(), 32);
         let again = runtime.create_identity();
         assert!(matches!(again, Err(GridFacadeError::IdentityExists)));
         // reload should give the same id
         let reloaded = runtime.get_identity().unwrap().unwrap();
-        assert_eq!(reloaded.id, first.id);
+        assert_eq!(reloaded.identity_id, first.identity_id);
+        assert_eq!(reloaded.epoch, 0);
     }
 
     #[test]
-    fn create_identity_then_register_machine_shows_in_list() {
+    fn create_identity_then_register_machine_shows_in_list_and_bumps_epoch() {
         let dir = tempdir().unwrap();
         let runtime = rt(dir.path());
-        runtime.create_identity().unwrap();
-        let caps = MachineKeyCapabilities::SEND_MESSAGES | MachineKeyCapabilities::RECEIVE_MESSAGES;
-        let machine = runtime.register_machine(caps.bits()).unwrap();
+        let identity = runtime.create_identity().unwrap();
+        assert_eq!(identity.epoch, 0);
+
+        let machine = runtime.register_machine(3).unwrap();
+        assert_eq!(machine.capabilities, 3);
+        assert_eq!(machine.epoch, 1);
+        assert_eq!(machine.identity_id, identity.identity_id);
+
         let list = runtime.list_devices().unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].machine_id, machine.machine_id);
-        assert_eq!(list[0].capabilities, caps);
+        assert_eq!(list[0].capabilities, 3);
+
+        // identity record should reflect the bumped epoch
+        let reloaded = runtime.get_identity().unwrap().unwrap();
+        assert_eq!(reloaded.epoch, 1);
+
+        // a second registration bumps the epoch again
+        let m2 = runtime.register_machine(1).unwrap();
+        assert_eq!(m2.epoch, 2);
+        assert_eq!(runtime.list_devices().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn register_machine_with_label_persists_label() {
+        let dir = tempdir().unwrap();
+        let runtime = rt(dir.path());
+        runtime.create_identity().unwrap();
+        let m = runtime
+            .register_machine_with_label(3, Some("laptop".into()))
+            .unwrap();
+        assert_eq!(m.label.as_deref(), Some("laptop"));
+        let list = runtime.list_devices().unwrap();
+        assert_eq!(list[0].label.as_deref(), Some("laptop"));
     }
 
     #[test]
@@ -339,5 +380,42 @@ mod tests {
         let cfg = runtime.read_config().unwrap();
         assert_eq!(cfg.grid_multiaddr, "/ip4/127.0.0.1/udp/9999/quic-v1");
         assert!(runtime.last_error.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn ensure_started_without_identity_returns_identity_missing() {
+        let dir = tempdir().unwrap();
+        let runtime = rt(dir.path());
+        // `Arc<ZeroSdk>` doesn't impl `Debug`, so unwrap_err is unavailable.
+        let res = runtime.ensure_started().await.map(|_| ());
+        assert!(matches!(res, Err(GridFacadeError::IdentityMissing)));
+    }
+
+    #[tokio::test]
+    async fn ensure_started_after_create_identity_brings_runtime_up() {
+        let dir = tempdir().unwrap();
+        let runtime = rt(dir.path());
+        runtime.create_identity().unwrap();
+
+        // Bootstrap should succeed: RocksDB opens locally and the stub
+        // `RealGridClient::connect` always returns Ok. We immediately drop
+        // the returned handle so the runtime owns the only `Arc<ZeroSdk>`
+        // — RocksDB holds an exclusive lock on its data dir, and reopening
+        // it later would fail otherwise.
+        drop(runtime.ensure_started().await.unwrap());
+        let st = runtime.status().await.unwrap();
+        assert!(st.connected);
+        assert!(st.last_error.is_none());
+        assert!(st.identity_id.is_some());
+        assert_eq!(
+            runtime.current_multiaddr().await.as_deref(),
+            Some(PersistedConfig::default().grid_multiaddr.as_str())
+        );
+
+        // disconnect + reconnect must still work.
+        runtime.disconnect().await;
+        assert!(!runtime.status().await.unwrap().connected);
+        drop(runtime.ensure_started().await.unwrap());
+        assert!(runtime.status().await.unwrap().connected);
     }
 }

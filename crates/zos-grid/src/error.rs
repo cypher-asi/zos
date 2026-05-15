@@ -13,7 +13,7 @@ pub enum GridFacadeError {
     #[error("config error: {0}")]
     Config(String),
 
-    /// Identity-store layer failure (CBOR encode/decode, missing record,
+    /// Identity-store layer failure (encode/decode, missing record,
     /// corrupt data on disk, ...).
     #[error("identity error: {0}")]
     Identity(String),
@@ -26,8 +26,8 @@ pub enum GridFacadeError {
     #[error("identity does not exist; create one first")]
     IdentityMissing,
 
-    /// `Zero::bootstrap` failed (typically because the GRID multiaddr is
-    /// unreachable). The error message is the SDK's own `Display` output.
+    /// Booting the `ZeroSdk` (RocksDB open or GRID dial) failed. The
+    /// message is the SDK's own `Display` output.
     #[error("bootstrap failed: {0}")]
     Bootstrap(String),
 }

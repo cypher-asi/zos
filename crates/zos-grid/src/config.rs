@@ -7,11 +7,18 @@
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use zero_sdk::ZeroConfig;
 
 use crate::error::GridFacadeError;
 
 const CONFIG_FILE: &str = "config.json";
+
+/// Default GRID multiaddr the UI seeds into a fresh `config.json`.
+///
+/// This mirrors the value the older `zero-sdk` exposed via
+/// `ZeroConfig::default().grid_multiaddr` so existing installs and screen
+/// captures keep matching after the migration to `zero-sdk-10`.
+pub const DEFAULT_GRID_MULTIADDR: &str =
+    "/ip4/3.129.15.45/tcp/3691/p2p/12D3KooWHvyFJm77ZAUR7DzAhRCjyhGgcwNxhQAoCptScBhQCs2b/p2p-circuit/p2p/12D3KooWHMNU9wSoHWUxW13tpz94h27L1F4ij26ytp9XsCPPhJNd/p2p/Zx12D3KooWHMNU9wSoHWUxW13tpz94h27L1F4ij26ytp9XsCPPhJNd";
 
 /// On-disk runtime configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,7 +30,7 @@ pub struct PersistedConfig {
 impl Default for PersistedConfig {
     fn default() -> Self {
         Self {
-            grid_multiaddr: ZeroConfig::default().grid_multiaddr,
+            grid_multiaddr: DEFAULT_GRID_MULTIADDR.to_owned(),
         }
     }
 }
@@ -69,9 +76,9 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn default_uses_sdk_default_multiaddr() {
+    fn default_uses_baked_in_multiaddr() {
         let cfg = PersistedConfig::default();
-        assert_eq!(cfg.grid_multiaddr, ZeroConfig::default().grid_multiaddr);
+        assert_eq!(cfg.grid_multiaddr, DEFAULT_GRID_MULTIADDR);
     }
 
     #[test]
