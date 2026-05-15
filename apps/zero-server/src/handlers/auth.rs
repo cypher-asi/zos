@@ -6,7 +6,9 @@ use axum::Json;
 
 use zos_auth::AuthError;
 
-use crate::dto::{AuthLoginRequest, AuthRegisterRequest, AuthSessionResponse, PasswordResetRequest};
+use crate::dto::{
+    AuthLoginRequest, AuthRegisterRequest, AuthSessionResponse, PasswordResetRequest,
+};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{AppState, AuthJwt, AuthSession, CachedSession};
 

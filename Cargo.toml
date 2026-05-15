@@ -3,5 +3,6 @@ members = [
     "apps/zero-desktop",
     "apps/zero-server",
     "crates/zos-auth",
+    "crates/zos-grid",
 ]
 resolver = "2"

@@ -40,11 +40,31 @@ fn seed_projects() -> Vec<Project> {
     ]
 }
 
+/// Resolve the on-disk data directory, in order:
+///
+/// 1. `ZERO_DATA_DIR` environment variable (set by `zero-desktop`).
+/// 2. `dirs::data_local_dir()/zero` (matches the desktop binary's default).
+/// 3. `./.zero-data` as a last resort if neither is available.
+pub fn resolve_data_dir() -> PathBuf {
+    if let Some(env) = std::env::var_os("ZERO_DATA_DIR") {
+        return PathBuf::from(env);
+    }
+    dirs::data_local_dir()
+        .map(|d| d.join("zero"))
+        .unwrap_or_else(|| PathBuf::from(".zero-data"))
+}
+
 pub fn create_router(interface_dir: Option<PathBuf>) -> axum::Router {
+    let data_dir = resolve_data_dir();
+    tracing::info!(data_dir = %data_dir.display(), "zero-server using data dir");
+
+    let grid = zos_grid::ZeroRuntime::new(data_dir).expect("failed to initialise zos-grid runtime");
+
     let state = AppState {
         auth_service: Arc::new(zos_auth::AuthService::new()),
         validation_cache: Arc::new(DashMap::new()),
         db: Arc::new(Mutex::new(seed_projects())),
+        grid,
     };
 
     router::create_router(state, interface_dir)

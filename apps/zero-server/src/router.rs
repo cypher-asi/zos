@@ -10,7 +10,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::handlers::{auth, projects};
+use crate::handlers::{auth, devices, grid, identity, projects};
 use crate::state::AppState;
 
 const LOCAL_CORS_HOSTS: &[&str] = &["localhost", "127.0.0.1"];
@@ -64,6 +64,22 @@ fn project_routes() -> Router<AppState> {
         )
 }
 
+fn grid_routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/grid/status", get(grid::status))
+        .route("/api/grid/config", post(grid::set_config))
+        .route("/api/grid/connect", post(grid::connect))
+        .route("/api/grid/disconnect", post(grid::disconnect))
+        .route(
+            "/api/identity",
+            get(identity::get_identity).post(identity::create_identity),
+        )
+        .route(
+            "/api/devices",
+            get(devices::list_devices).post(devices::create_device),
+        )
+}
+
 pub fn create_router(state: AppState, interface_dir: Option<PathBuf>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|origin, _| is_local_origin(origin)))
@@ -74,6 +90,7 @@ pub fn create_router(state: AppState, interface_dir: Option<PathBuf>) -> Router 
     let protected = Router::new()
         .merge(protected_auth_routes())
         .merge(project_routes())
+        .merge(grid_routes())
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth_guard::require_verified_session,

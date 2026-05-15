@@ -221,18 +221,20 @@ mod tests {
     }
 
     fn make_state_with_cache(cache: crate::state::ValidationCache) -> AppState {
+        let dir = tempfile::tempdir().unwrap();
+        let grid = zos_grid::ZeroRuntime::new(dir.path().to_path_buf()).unwrap();
+        // intentionally leak the tempdir for the lifetime of the test process
+        // — we only need the directory to exist while `grid` references it.
+        std::mem::forget(dir);
         AppState {
             auth_service: Arc::new(zos_auth::AuthService::new()),
             validation_cache: cache,
             db: Arc::new(tokio::sync::Mutex::new(vec![])),
+            grid,
         }
     }
 
-    fn insert_cached(
-        cache: &crate::state::ValidationCache,
-        jwt: &str,
-        age: std::time::Duration,
-    ) {
+    fn insert_cached(cache: &crate::state::ValidationCache, jwt: &str, age: std::time::Duration) {
         cache.insert(
             jwt.to_string(),
             CachedSession {

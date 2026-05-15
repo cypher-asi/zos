@@ -73,6 +73,7 @@ pub(crate) struct AppState {
     pub auth_service: Arc<AuthService>,
     pub validation_cache: ValidationCache,
     pub db: Db,
+    pub grid: Arc<zos_grid::ZeroRuntime>,
 }
 
 #[cfg(test)]
@@ -135,10 +136,12 @@ mod tests {
 
     #[test]
     fn app_state_is_clone() {
+        let dir = tempfile::tempdir().unwrap();
         let state = AppState {
             auth_service: Arc::new(AuthService::new()),
             validation_cache: Arc::new(DashMap::new()),
             db: Arc::new(Mutex::new(vec![])),
+            grid: zos_grid::ZeroRuntime::new(dir.path().to_path_buf()).unwrap(),
         };
         let _cloned = state.clone();
     }

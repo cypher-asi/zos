@@ -29,9 +29,7 @@ enum WinCmd {
     Drag,
 }
 
-fn ipc_handler(
-    proxy: EventLoopProxy<UserEvent>,
-) -> impl Fn(wry::http::Request<String>) + 'static {
+fn ipc_handler(proxy: EventLoopProxy<UserEvent>) -> impl Fn(wry::http::Request<String>) + 'static {
     move |req: wry::http::Request<String>| {
         let msg = req.body().trim();
         match msg {
@@ -85,8 +83,7 @@ fn set_square_corners(_window: &tao::window::Window) {
         use tao::platform::macos::WindowExtMacOS;
         unsafe {
             let ns_window = _window.ns_window() as *mut objc::runtime::Object;
-            let content_view: *mut objc::runtime::Object =
-                objc::msg_send![ns_window, contentView];
+            let content_view: *mut objc::runtime::Object = objc::msg_send![ns_window, contentView];
             let _: () = objc::msg_send![content_view, setWantsLayer: true];
             let layer: *mut objc::runtime::Object = objc::msg_send![content_view, layer];
             let _: () = objc::msg_send![layer, setCornerRadius: 0.0_f64];
@@ -204,10 +201,7 @@ fn spawn_server(
 // Event loop
 // ---------------------------------------------------------------------------
 
-fn run_event_loop(
-    event_loop: tao::event_loop::EventLoop<UserEvent>,
-    window: tao::window::Window,
-) {
+fn run_event_loop(event_loop: tao::event_loop::EventLoop<UserEvent>, window: tao::window::Window) {
     event_loop.run(move |event, _elwt, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -250,6 +244,11 @@ fn main() {
         .join("zero");
     std::fs::create_dir_all(&data_dir).expect("create data dir");
     let webview_data_dir = data_dir.join("webview");
+
+    // Make the on-disk SDK state visible to the embedded `zero-server` so
+    // `cargo run -p zero-server` (dev) and `cargo run -p zero-desktop`
+    // share the same identity / device store.
+    std::env::set_var("ZERO_DATA_DIR", &data_dir);
 
     let interface_dir = find_interface_dir();
     match interface_dir {

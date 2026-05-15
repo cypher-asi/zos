@@ -113,7 +113,8 @@ impl AuthService {
         }
 
         let login_data: ZosLoginResponse = res.json().await.map_err(AuthError::Http)?;
-        self.build_session_from_token(&login_data.access_token).await
+        self.build_session_from_token(&login_data.access_token)
+            .await
     }
 
     pub async fn register(

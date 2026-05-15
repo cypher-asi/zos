@@ -26,7 +26,9 @@ async fn main() {
     let interface_dir = find_interface_dir();
     match interface_dir {
         Some(ref dir) => info!(path = %dir.display(), "serving interface"),
-        None => warn!("no interface dist found; API-only mode (run `cd interface && npm run dev` for UI)"),
+        None => warn!(
+            "no interface dist found; API-only mode (run `cd interface && npm run dev` for UI)"
+        ),
     }
 
     let app = zero_server::create_router(interface_dir);
