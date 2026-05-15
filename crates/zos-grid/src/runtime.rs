@@ -391,17 +391,55 @@ mod tests {
         assert!(matches!(res, Err(GridFacadeError::IdentityMissing)));
     }
 
+    /// `RealGridClient::connect` now actually dials the upstream Zode via
+    /// `grid-net`, so this test no longer exercises the happy path (we
+    /// have no live node in CI). Instead we verify the *bookkeeping* when
+    /// connect fails: `ensure_started` surfaces the upstream error as
+    /// `GridFacadeError::Bootstrap`, `status.connected` flips back to
+    /// `false`, and `last_error` is populated.
+    ///
+    /// The live-node round-trip is covered by the `#[ignore]`d
+    /// integration test below — run it manually against a real zode.
     #[tokio::test]
-    async fn ensure_started_after_create_identity_brings_runtime_up() {
+    async fn ensure_started_with_unreachable_multiaddr_records_bootstrap_error() {
+        let dir = tempdir().unwrap();
+        let runtime = rt(dir.path());
+        runtime.create_identity().unwrap();
+        // Force a parse-time failure inside `RealGridClient::connect` so the
+        // test fails deterministically without waiting for a libp2p dial
+        // timeout.
+        runtime
+            .set_multiaddr("not-a-valid-multiaddr".into())
+            .await
+            .unwrap();
+
+        let err = runtime.ensure_started().await.map(|_| ()).unwrap_err();
+        assert!(
+            matches!(err, GridFacadeError::Bootstrap(_)),
+            "unexpected error variant: {err:?}"
+        );
+
+        let st = runtime.status().await.unwrap();
+        assert!(!st.connected);
+        assert!(st.identity_id.is_some());
+        let last = st.last_error.expect("last_error should be populated on dial failure");
+        assert!(
+            last.contains("invalid multiaddr") || last.contains("grid"),
+            "unexpected last_error: {last}"
+        );
+    }
+
+    /// Live-node smoke test for the full bring-up path. Requires a real
+    /// zode reachable at the multiaddr stored in `PersistedConfig::default`.
+    /// Run with `cargo test -p zos-grid -- --ignored
+    /// ensure_started_against_live_node`.
+    #[tokio::test]
+    #[ignore = "requires a live GRID zode at the default multiaddr"]
+    async fn ensure_started_against_live_node() {
         let dir = tempdir().unwrap();
         let runtime = rt(dir.path());
         runtime.create_identity().unwrap();
 
-        // Bootstrap should succeed: RocksDB opens locally and the stub
-        // `RealGridClient::connect` always returns Ok. We immediately drop
-        // the returned handle so the runtime owns the only `Arc<ZeroSdk>`
-        // — RocksDB holds an exclusive lock on its data dir, and reopening
-        // it later would fail otherwise.
         drop(runtime.ensure_started().await.unwrap());
         let st = runtime.status().await.unwrap();
         assert!(st.connected);
@@ -412,7 +450,6 @@ mod tests {
             Some(PersistedConfig::default().grid_multiaddr.as_str())
         );
 
-        // disconnect + reconnect must still work.
         runtime.disconnect().await;
         assert!(!runtime.status().await.unwrap().connected);
         drop(runtime.ensure_started().await.unwrap());
